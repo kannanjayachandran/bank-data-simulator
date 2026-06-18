@@ -1,0 +1,14 @@
+[project]
+name = "bank-data-simulator"
+version = "0.1.0"
+description = "Realistic bank data simulator for testing and development of Churn Compass or similar applications."
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "pydantic>=2.13.4",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.0",
+]
