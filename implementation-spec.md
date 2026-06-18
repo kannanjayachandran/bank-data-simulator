@@ -978,3 +978,8 @@ The generator should be:
 - simple enough to finish
 
 This is the baseline spec for code generation.
+
+
+## Build order
+
+![Build order](./assets/churn_compass_build_order.svg)
