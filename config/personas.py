@@ -273,3 +273,25 @@ PERSONA_CONFIGS: Dict[Persona, PersonaConfig] = {
         sigma_noise=0.12,  # Highest-risk persona noise
     ),
 }
+
+# Churn thresholds by persona from spec Section 9.3
+CHURN_THRESHOLDS: Dict[Persona, float] = {
+    Persona.SALARY_CORE: 0.72,
+    Persona.AFFLUENT_MULTI_PRODUCT: 0.78,
+    Persona.DIGITAL_NATIVE: 0.70,
+    Persona.CREDIT_STRESSED: 0.58,
+    Persona.DORMANT_WEALTHY: 0.74,
+    Persona.COMPLAINT_PRONE_CHURNER: 0.55,
+}
+
+# Explicit component weights for Churn Scorer risk scoring formula
+# Used to scale the raw component values during churn scoring calculation
+CHURN_COMPONENT_WEIGHTS: Dict[str, float] = {
+    "event_score": 0.30,
+    "trend_score": 0.15,
+    "product_score": -0.10,  # Negative, representing risk mitigation of holding multiple products
+    "complaint_score": 0.25,
+    "loan_stress_score": 0.20,
+    "digital_inactivity_score": 0.15,
+}
+
