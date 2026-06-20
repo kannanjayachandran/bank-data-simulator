@@ -200,7 +200,7 @@ def generate_feature_snapshots(
             (pl.col("snapshot_month") >= m_minus_6) & (pl.col("snapshot_month") < as_of)
         )
         activity_window = customer_monthly_activity.filter(
-            (pl.col("snapshot_month") >= m_minus_6) & (pl.col("snapshot_month") < as_of)
+            (pl.col("snapshot_month") >= m_minus_12) & (pl.col("snapshot_month") < as_of)
         )
         digital_window = digital_engagement_monthly.filter(
             (pl.col("snapshot_month") >= m_minus_12) & (pl.col("snapshot_month") < as_of)
@@ -316,6 +316,7 @@ def generate_feature_snapshots(
             p_count = prod_lookup.get(cid, 1)
 
             # 3. balance_change_3m
+            # Formula: avg_balance([M-3, M)) / nullif(avg_balance([M-6, M-3)), 0) - 1.0
             # average balance in [M-3, M) vs [M-6, M-3)
             # average balances per month
             m_balances = bal_by_cust.get(cid, {})
@@ -353,11 +354,14 @@ def generate_feature_snapshots(
             else:
                 txn_change = 0.0
 
-            # 5. login_count_change_6m (recent 3m vs prior 3m)
-            recent_logins = [m_activity[rm]["logins"] for rm in recent_months if rm in m_activity]
+            # 5. login_count_change_6m (recent 6m vs prior 6m)
+            recent_months_6m = [add_months(as_of, -i) for i in range(1, 7)]
+            prior_months_6m = [add_months(as_of, -i) for i in range(7, 13)]
+            
+            recent_logins = [m_activity[rm]["logins"] for rm in recent_months_6m if rm in m_activity]
             avg_login_recent = np.mean(recent_logins) if recent_logins else 0.0
             
-            prior_logins = [m_activity[pm]["logins"] for pm in prior_months if pm in m_activity]
+            prior_logins = [m_activity[pm]["logins"] for pm in prior_months_6m if pm in m_activity]
             avg_login_prior = np.mean(prior_logins) if prior_logins else 0.0
 
             if avg_login_prior > 0:
@@ -404,6 +408,7 @@ def generate_feature_snapshots(
             c_rate = c_resp / c_sent if c_sent > 0 else 0.0
 
             # 15. product_acquisition_velocity_6m
+            # Formula: products_count at snapshot_month = M-1 minus products_count at snapshot_month = M-6, floored at 0
             prod_m1_cnt = prod_lookup.get(cid, 0)
             prod_m6_cnt = prod_m6_lookup.get(cid, 0)
             prod_velocity = max(0, prod_m1_cnt - prod_m6_cnt)
