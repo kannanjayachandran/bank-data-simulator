@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: bank_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: bank_data
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d bank_data"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  simulator-runner:
+    build: .
+    container_name: bank_simulator_runner
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./data:/app/data
+    command: ["--n-customers", "1000", "--sim-months", "24", "--postgres-uri", "postgresql://postgres:password@db:5432/bank_data"]
+
+volumes:
+  postgres_data:
