@@ -43,8 +43,9 @@ def generate_spine(config: SimulationConfig) -> Spine:
 
     # 2. Distribute personas uniformly across customers
     personas = list(Persona)
-    customer_personas_enum = rng.choice(personas, size=config.n_customers)
-    customer_personas = [str(p) for p in customer_personas_enum]
+    persona_values = [p.value for p in personas]
+    customer_personas_drawn = rng.choice(persona_values, size=config.n_customers)
+    customer_personas = [str(p) for p in customer_personas_drawn]
 
     # 3. Sample low-sensitivity segment share and assign flags
     low_sens_share = rng.uniform(
