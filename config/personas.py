@@ -110,9 +110,9 @@ PERSONA_CONFIGS: Dict[Persona, PersonaConfig] = {
         # low complaint rate
         complaint_rate_min=0.005,
         complaint_rate_max=0.02,
-        # 0.1%–0.6% base monthly churn
+        # 0.1%–0.4% base monthly churn
         base_monthly_churn_min=0.001,
-        base_monthly_churn_max=0.006,
+        base_monthly_churn_max=0.004,
         product_uptake_probs={
             "savings": 0.97,
             "current": 0.35,
@@ -145,9 +145,9 @@ PERSONA_CONFIGS: Dict[Persona, PersonaConfig] = {
         # low-medium complaint rate
         complaint_rate_min=0.01,
         complaint_rate_max=0.04,
-        # 0.2%–0.8% base monthly churn
-        base_monthly_churn_min=0.002,
-        base_monthly_churn_max=0.008,
+        # 0.1%–0.5% base monthly churn
+        base_monthly_churn_min=0.001,
+        base_monthly_churn_max=0.005,
         product_uptake_probs={
             "savings": 0.96,
             "current": 0.15,
@@ -180,9 +180,9 @@ PERSONA_CONFIGS: Dict[Persona, PersonaConfig] = {
         # high complaint rate
         complaint_rate_min=0.05,
         complaint_rate_max=0.15,
-        # 1.0%–3.0% base monthly churn
-        base_monthly_churn_min=0.010,
-        base_monthly_churn_max=0.030,
+        # 0.5%–1.5% base monthly churn
+        base_monthly_churn_min=0.005,
+        base_monthly_churn_max=0.015,
         product_uptake_probs={
             "savings": 0.94,
             "current": 0.10,
@@ -250,9 +250,9 @@ PERSONA_CONFIGS: Dict[Persona, PersonaConfig] = {
         # very high complaint rate
         complaint_rate_min=0.10,
         complaint_rate_max=0.30,
-        # 2.0%–5.0% base monthly churn
-        base_monthly_churn_min=0.020,
-        base_monthly_churn_max=0.050,
+        # 1.0%–2.5% base monthly churn
+        base_monthly_churn_min=0.010,
+        base_monthly_churn_max=0.025,
         product_uptake_probs={
             "savings": 0.93,
             "current": 0.10,

@@ -19,3 +19,23 @@ DEFAULT_TIMEZONE: str = "UTC"
 # Low-sensitivity segment share range
 # The generator spine will sample a share from this range for the customer pool.
 LOW_SENSITIVITY_SHARE_RANGE: Tuple[float, float] = (0.10, 0.15)
+
+# Card and credit defaults
+CREDIT_LIMIT_MULTIPLIER: float = 3.0
+PRIMARY_ACCOUNT_TYPE: str = "Savings"
+
+# Loan tenure ranges (in months)
+PERSONAL_LOAN_TENURE_RANGE: Tuple[int, int] = (12, 60)
+HOME_LOAN_TENURE_RANGE: Tuple[int, int] = (120, 240)
+
+# Branch Selection Weights
+BRANCH_METRO_WEIGHT: float = 2.0
+BRANCH_URBAN_WEIGHT: float = 1.0
+
+# Fixed Obligation to Income Ratio (FOIR) Limits
+FOIR_LIMITS = {
+    "Personal Loan": 0.40,
+    "Home Loan": 0.50
+}
+
+
