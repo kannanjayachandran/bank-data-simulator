@@ -24,11 +24,12 @@ class Spine:
     scheduled_events: pl.DataFrame
 
 
-def generate_spine(config: SimulationConfig) -> Spine:
+def generate_spine(config: SimulationConfig, customer_id_start: int = CUSTOMER_ID_START) -> Spine:
     """Generates the customer spine and schedules unconditional events.
 
     Args:
         config: The top-level simulation configuration.
+        customer_id_start: The starting customer ID offset.
 
     Returns:
         Spine: Contains the simulation state and scheduled events DataFrames.
@@ -38,7 +39,7 @@ def generate_spine(config: SimulationConfig) -> Spine:
 
     # 1. Generate customer IDs
     customer_ids = np.arange(
-        CUSTOMER_ID_START, CUSTOMER_ID_START + config.n_customers, dtype=np.int64
+        customer_id_start, customer_id_start + config.n_customers, dtype=np.int64
     )
 
     # 2. Distribute personas uniformly across customers
