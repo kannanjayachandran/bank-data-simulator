@@ -22,6 +22,7 @@ def generate_cards(
     accounts_df: pl.DataFrame,
     config: SimulationConfig,
     rng: Optional[np.random.Generator] = None,
+    card_id_start: int = CARD_ID_START,
 ) -> pl.DataFrame:
     """Generates the static card_portfolio DataFrame.
 
@@ -72,7 +73,7 @@ def generate_cards(
         cust_accounts[cid].append(acc)
 
     card_rows = []
-    current_card_id = CARD_ID_START
+    current_card_id = card_id_start
 
     for cid in spine.simulation_state["customer_id"].to_list():
         c_info = cust_data[cid]
