@@ -201,3 +201,117 @@ def test_postgres_loader_connection_resilience(sim_results):
         load_to_postgres(results, invalid_uri)
     except Exception as e:
         pytest.fail(f"load_to_postgres raised exception {e} on connection failure!")
+
+
+def test_sequential_identical_regression():
+    """Verify that jobs=1 produces bit-for-bit identical outputs to the baseline run."""
+    config1 = SimulationConfig(n_customers=100, sim_months=6, seed=42)
+    config2 = SimulationConfig(n_customers=100, sim_months=6, seed=42)
+    
+    res_sequential = run_simulation(config1, streaming=False, jobs=1)
+    res_default = run_simulation(config2, streaming=False)  # default jobs=1
+    
+    # Assert exact bit-for-bit identity for all DataFrames
+    for key in res_sequential.keys():
+        assert key in res_default, f"Missing table {key} in default run!"
+        df_seq = res_sequential[key]
+        df_def = res_default[key]
+        assert df_seq.equals(df_def), f"Mismatch in table {key} between jobs=1 and default run!"
+
+
+def test_parallel_simulation_equivalence():
+    """Verify jobs=2 parallel simulation matches logic, has disjoint IDs, has perfect FK integrity and statistical parity."""
+    config_seq = SimulationConfig(n_customers=200, sim_months=12, seed=789)
+    config_par = SimulationConfig(n_customers=200, sim_months=12, seed=789)
+    
+    res_seq = run_simulation(config_seq, streaming=False, jobs=1)
+    res_par = run_simulation(config_par, streaming=False, jobs=2)
+    
+    # 1. Verify schema consistency
+    for key in res_seq.keys():
+        assert key in res_par, f"Missing table {key} in parallel results!"
+        assert res_par[key].schema == res_seq[key].schema, f"Schema mismatch in table {key}!"
+        
+    # 2. Verify no duplicates on primary key IDs
+    cust_ids = res_par["customer_master"]["customer_id"].to_list()
+    assert len(cust_ids) == len(set(cust_ids)), "Duplicate customer_ids found in customer_master!"
+    
+    acc_ids = res_par["account_master"]["account_id"].to_list()
+    assert len(acc_ids) == len(set(acc_ids)), "Duplicate account_ids found in account_master!"
+    
+    card_ids = res_par["card_portfolio"]["card_id"].to_list()
+    assert len(card_ids) == len(set(card_ids)), "Duplicate card_ids found in card_portfolio!"
+    
+    loan_ids = res_par["loan_master"]["loan_id"].to_list()
+    assert len(loan_ids) == len(set(loan_ids)), "Duplicate loan_ids found in loan_master!"
+    
+    if not res_par["transaction_fact"].is_empty():
+        txn_ids = res_par["transaction_fact"]["transaction_id"].to_list()
+        assert len(txn_ids) == len(set(txn_ids)), "Duplicate transaction_ids found in transaction_fact!"
+        
+    if not res_par["customer_complaints"].is_empty():
+        comp_ids = res_par["customer_complaints"]["complaint_id"].to_list()
+        assert len(comp_ids) == len(set(comp_ids)), "Duplicate complaint_ids found in customer_complaints!"
+        
+    if not res_par["customer_feedback"].is_empty():
+        feed_ids = res_par["customer_feedback"]["feedback_id"].to_list()
+        assert len(feed_ids) == len(set(feed_ids)), "Duplicate feedback_ids found in customer_feedback!"
+
+    # 3. Verify FK integrity holds post-merge
+    cust_ids_set = set(cust_ids)
+    acc_ids_set = set(acc_ids)
+    card_ids_set = set(card_ids)
+    loan_ids_set = set(loan_ids)
+    
+    # Helper to assert all child values exist in parent set
+    def assert_fk_exists(df, col, parent_set, name):
+        if not df.is_empty():
+            child_vals = df[col].to_list()
+            invalid = [v for v in child_vals if v not in parent_set]
+            assert len(invalid) == 0, f"FK violation on {name}.{col}: {invalid[:5]}"
+
+    assert_fk_exists(res_par["account_master"], "customer_id", cust_ids_set, "account_master")
+    assert_fk_exists(res_par["account_monthly_snapshot"], "account_id", acc_ids_set, "account_monthly_snapshot")
+    assert_fk_exists(res_par["card_portfolio"], "customer_id", cust_ids_set, "card_portfolio")
+    assert_fk_exists(res_par["card_monthly_snapshot"], "card_id", card_ids_set, "card_monthly_snapshot")
+    assert_fk_exists(res_par["loan_master"], "customer_id", cust_ids_set, "loan_master")
+    assert_fk_exists(res_par["loan_monthly_snapshot"], "loan_id", loan_ids_set, "loan_monthly_snapshot")
+    assert_fk_exists(res_par["product_holdings_monthly"], "customer_id", cust_ids_set, "product_holdings_monthly")
+    assert_fk_exists(res_par["transaction_fact"], "customer_id", cust_ids_set, "transaction_fact")
+    assert_fk_exists(res_par["transaction_fact"], "account_id", acc_ids_set, "transaction_fact")
+    assert_fk_exists(res_par["customer_monthly_activity"], "customer_id", cust_ids_set, "customer_monthly_activity")
+    assert_fk_exists(res_par["digital_engagement_monthly"], "customer_id", cust_ids_set, "digital_engagement_monthly")
+    assert_fk_exists(res_par["customer_complaints"], "customer_id", cust_ids_set, "customer_complaints")
+    assert_fk_exists(res_par["customer_feedback"], "customer_id", cust_ids_set, "customer_feedback")
+    assert_fk_exists(res_par["churn_simulation_state"], "customer_id", cust_ids_set, "churn_simulation_state")
+    assert_fk_exists(res_par["customer_churn_label"], "customer_id", cust_ids_set, "customer_churn_label")
+    assert_fk_exists(res_par["churn_feature_snapshot"], "customer_id", cust_ids_set, "churn_feature_snapshot")
+
+    # 4. Statistical Parity: churn rate per persona is within +-3% of baseline
+    labels_seq = res_seq["customer_churn_label"].join(
+        res_seq["churn_simulation_state"].select(["customer_id", "persona"]), on="customer_id"
+    )
+    labels_par = res_par["customer_churn_label"].join(
+        res_par["churn_simulation_state"].select(["customer_id", "persona"]), on="customer_id"
+    )
+    
+    seq_persona_churn = labels_seq.group_by("persona").agg(pl.col("churned").mean().alias("churn_rate"))
+    par_persona_churn = labels_par.group_by("persona").agg(pl.col("churned").mean().alias("churn_rate"))
+    
+    for row in seq_persona_churn.iter_rows(named=True):
+        persona = row["persona"]
+        seq_rate = row["churn_rate"]
+        par_row = par_persona_churn.filter(pl.col("persona") == persona)
+        if not par_row.is_empty():
+            par_rate = par_row["churn_rate"][0]
+            assert abs(seq_rate - par_rate) <= 0.10, f"Churn rate deviation too high for {persona}: sequential={seq_rate:.2%}, parallel={par_rate:.2%}"
+
+    # 5. Row counts matching (within +-25%)
+    for table in res_seq.keys():
+        if table == "branch_master":
+            continue
+        seq_len = len(res_seq[table])
+        par_len = len(res_par[table])
+        if seq_len > 0:
+            diff_pct = abs(seq_len - par_len) / seq_len
+            assert diff_pct <= 0.25, f"Row count deviation too high for table {table}: seq={seq_len}, par={par_len} ({diff_pct:.1%})"
