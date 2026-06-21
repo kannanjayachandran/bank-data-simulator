@@ -14,6 +14,7 @@ from config.simulation import SimulationConfig
 from config.personas import Persona, PERSONA_CONFIGS
 from config.events import HiddenEvent, CONDITIONAL_EVENT_BASELINES
 from config.constants import (
+    CUSTOMER_ID_START,
     ACCOUNT_ID_START,
     CARD_ID_START,
     LOAN_ID_START,
@@ -66,6 +67,14 @@ def run_simulation(
     config: SimulationConfig,
     streaming: bool = False,
     output_dir: Optional[str] = None,
+    customer_id_start: int = CUSTOMER_ID_START,
+    account_id_start: int = ACCOUNT_ID_START,
+    card_id_start: int = CARD_ID_START,
+    loan_id_start: int = LOAN_ID_START,
+    txn_id_start: int = TRANSACTION_ID_START,
+    complaint_id_start: int = COMPLAINT_ID_START,
+    feedback_id_start: int = FEEDBACK_ID_START,
+    jobs: int = 1,
 ) -> Dict[str, pl.DataFrame]:
     """Runs the full simulation pipeline with O(1) indexed lookups for speed.
 
@@ -73,20 +82,43 @@ def run_simulation(
         config: Simulation configuration.
         streaming: If True, writes monthly snapshots/transactions incrementally to Parquet and clears memory.
         output_dir: Output directory path for streaming mode.
+        customer_id_start: The starting customer ID offset.
+        account_id_start: The starting account ID offset.
+        card_id_start: The starting card ID offset.
+        loan_id_start: The starting loan ID offset.
+        txn_id_start: The starting transaction ID offset.
+        complaint_id_start: The starting complaint ID offset.
+        feedback_id_start: The starting feedback ID offset.
+        jobs: Number of parallel jobs to run.
 
     Returns:
         Dict[str, pl.DataFrame]: Dictionary containing the resulting tables.
     """
+    if jobs > 1:
+        return run_parallel_simulation(
+            config=config,
+            streaming=streaming,
+            output_dir=output_dir,
+            customer_id_start=customer_id_start,
+            account_id_start=account_id_start,
+            card_id_start=card_id_start,
+            loan_id_start=loan_id_start,
+            txn_id_start=txn_id_start,
+            complaint_id_start=complaint_id_start,
+            feedback_id_start=feedback_id_start,
+            jobs=jobs,
+        )
+
     rng = np.random.default_rng(config.seed)
 
     # 1. Generate Static Master Tables
     branches_df = generate_branches()
-    spine = generate_spine(config)
+    spine = generate_spine(config, customer_id_start)
     initial_products = generate_initial_products(spine, config, rng)
     customer_df = generate_customers(spine, config, rng)
-    accounts_df = generate_accounts(spine, customer_df, initial_products, config, rng)
-    cards_df = generate_cards(spine, customer_df, initial_products, accounts_df, config, rng)
-    loans_df = generate_loans(spine, customer_df, initial_products, config, rng)
+    accounts_df = generate_accounts(spine, customer_df, initial_products, config, rng, account_id_start)
+    cards_df = generate_cards(spine, customer_df, initial_products, accounts_df, config, rng, card_id_start)
+    loans_df = generate_loans(spine, customer_df, initial_products, config, rng, loan_id_start)
 
     # 2. Convert DataFrames to dicts/lists for runtime modifications
     customers = customer_df.to_dicts()
@@ -184,12 +216,12 @@ def run_simulation(
     previous_products_count = {c["customer_id"]: sum(product_holdings[c["customer_id"]].values()) for c in customers}
 
     # Dynamic ID offsets
-    next_txn_id = TRANSACTION_ID_START
-    next_complaint_id = COMPLAINT_ID_START
-    next_feedback_id = FEEDBACK_ID_START
-    next_account_id = ACCOUNT_ID_START + config.n_customers * 2
-    next_card_id = CARD_ID_START + config.n_customers * 2
-    next_loan_id = LOAN_ID_START + config.n_customers * 2
+    next_txn_id = txn_id_start
+    next_complaint_id = complaint_id_start
+    next_feedback_id = feedback_id_start
+    next_account_id = account_id_start + len(accounts_df)
+    next_card_id = card_id_start + len(cards_df)
+    next_loan_id = loan_id_start + len(loans_df)
 
     # Global lists to accumulate snapshots
     all_transactions = []
@@ -1105,3 +1137,183 @@ def run_simulation(
         })
 
     return res_dict
+
+
+def _run_sub_simulation(args: Dict[str, Any]) -> Dict[str, pl.DataFrame]:
+    """Helper worker function to run an independent simulation chunk in a child process."""
+    return run_simulation(**args)
+
+
+def distribute_customers(n_customers: int, jobs: int) -> List[int]:
+    """Distributes the customer pool size evenly among the parallel worker processes.
+
+    Args:
+        n_customers: Total number of customers.
+        jobs: Number of desired jobs/workers.
+
+    Returns:
+        List[int]: List containing customer counts for each worker chunk.
+    """
+    jobs = min(jobs, n_customers)
+    base = n_customers // jobs
+    rem = n_customers % jobs
+    return [base + 1 if i < rem else base for i in range(jobs)]
+
+
+def run_parallel_simulation(
+    config: SimulationConfig,
+    streaming: bool,
+    output_dir: Optional[str],
+    customer_id_start: int,
+    account_id_start: int,
+    card_id_start: int,
+    loan_id_start: int,
+    txn_id_start: int,
+    complaint_id_start: int,
+    feedback_id_start: int,
+    jobs: int,
+) -> Dict[str, pl.DataFrame]:
+    """Orchestrates parallel simulation runs across multiple child processes.
+
+    Runs distinct customer chunks concurrently using ProcessPoolExecutor, allocating
+    pre-computed disjoint ID ranges to prevent key collisions, and merges the streamed outputs.
+    """
+    import concurrent.futures
+    import logging
+    import shutil
+    import tempfile
+    
+    logger = logging.getLogger("simulator")
+    
+    original_streaming = streaming
+    # 1. Parallel execution requires streaming mode to maintain a flat memory footprint and avoid OOMs
+    if not streaming:
+        logger.warning("Forcing streaming=True for parallel execution to manage memory.")
+        streaming = True
+        
+    temp_dir_obj = None
+    if output_dir is None:
+        os.makedirs("./data", exist_ok=True)
+        temp_dir_obj = tempfile.TemporaryDirectory(dir="./data", prefix="parallel_sim_temp_")
+        output_dir = temp_dir_obj.name
+        
+    customer_counts = distribute_customers(config.n_customers, jobs)
+    actual_jobs = len(customer_counts)
+    
+    # 2. Pre-allocate ID ranges with safe headroom per customer to ensure workers write to disjoint key ranges.
+    # Headroom math allows 10 accounts/cards/loans, 10,000 transactions, and 100 complaints/feedbacks per customer.
+    # Gaps in ID keys between worker chunks are normal and acceptable in synthetic data.
+    account_chunk_limit = 10
+    card_chunk_limit = 10
+    loan_chunk_limit = 10
+    txn_chunk_limit = 10000
+    complaint_chunk_limit = 100
+    feedback_chunk_limit = 100
+    
+    tasks = []
+    start_idx = 0
+    for i in range(actual_jobs):
+        chunk_n = customer_counts[i]
+        chunk_config = SimulationConfig(
+            n_customers=chunk_n,
+            sim_start=config.sim_start,
+            sim_months=config.sim_months,
+            seed=config.seed + i  # Shift seed deterministically per chunk to draw unique random patterns
+        )
+        chunk_output_dir = os.path.join(output_dir, "temp_chunks", f"chunk_{i}")
+        
+        chunk_args = {
+            "config": chunk_config,
+            "streaming": True,
+            "output_dir": chunk_output_dir,
+            "customer_id_start": customer_id_start + start_idx,
+            "account_id_start": account_id_start + start_idx * account_chunk_limit,
+            "card_id_start": card_id_start + start_idx * card_chunk_limit,
+            "loan_id_start": loan_id_start + start_idx * loan_chunk_limit,
+            "txn_id_start": txn_id_start + start_idx * txn_chunk_limit,
+            "complaint_id_start": complaint_id_start + start_idx * complaint_chunk_limit,
+            "feedback_id_start": feedback_id_start + start_idx * feedback_chunk_limit,
+            "jobs": 1,  # Sub-simulations must run sequentially
+        }
+        tasks.append(chunk_args)
+        start_idx += chunk_n
+        
+    # 3. Execute concurrently using 'spawn' start method to prevent deadlocks from thread pools or locks
+    import multiprocessing
+    ctx = multiprocessing.get_context("spawn")
+    results_list = []
+    with concurrent.futures.ProcessPoolExecutor(max_workers=actual_jobs, mp_context=ctx) as executor:
+        futures = [executor.submit(_run_sub_simulation, task) for task in tasks]
+        for fut in concurrent.futures.as_completed(futures):
+            results_list.append(fut.result())
+            
+    # Sort results to ensure deterministic ordering of final concatenated DataFrames
+    results_list.sort(key=lambda res: res["customer_master"]["customer_id"].min())
+    
+    # 4. Concatenate static master tables returned in memory (discarding duplicate branch_master copies)
+    final_results = {}
+    for table_name in results_list[0].keys():
+        if table_name == "branch_master":
+            final_results[table_name] = results_list[0][table_name]
+        else:
+            dfs_to_concat = [res[table_name] for res in results_list if not res[table_name].is_empty()]
+            if dfs_to_concat:
+                final_results[table_name] = pl.concat(dfs_to_concat)
+            else:
+                final_results[table_name] = results_list[0][table_name]
+                
+    # 5. Merge streamed partitioned tables partition-by-partition to avoid write collisions
+    partition_cols = {
+        "account_monthly_snapshot": "snapshot_month",
+        "card_monthly_snapshot": "snapshot_month",
+        "loan_monthly_snapshot": "snapshot_month",
+        "product_holdings_monthly": "snapshot_month",
+        "transaction_fact": "txn_month",  # Note: transaction partitions by txn_month column
+        "customer_monthly_activity": "snapshot_month",
+        "digital_engagement_monthly": "snapshot_month",
+    }
+    
+    for table_name, partition_col in partition_cols.items():
+        # Discover all unique partition directories (e.g., snapshot_month=YYYY-MM-DD) across all workers
+        unique_partition_dirs = set()
+        for j in range(actual_jobs):
+            chunk_table_dir = os.path.join(output_dir, "temp_chunks", f"chunk_{j}", table_name)
+            if os.path.exists(chunk_table_dir):
+                for entry in os.listdir(chunk_table_dir):
+                    if entry.startswith(f"{partition_col}="):
+                        unique_partition_dirs.add(entry)
+                        
+        table_dfs = []
+        for part_dir in sorted(unique_partition_dirs):
+            chunk_dfs = []
+            for j in range(actual_jobs):
+                part_file_path = os.path.join(output_dir, "temp_chunks", f"chunk_{j}", table_name, part_dir, "part-0.parquet")
+                if os.path.exists(part_file_path):
+                    chunk_dfs.append(pl.read_parquet(part_file_path))
+                    
+            if chunk_dfs:
+                merged_part_df = pl.concat(chunk_dfs)
+                if original_streaming:
+                    # Write the combined partition file to the final destination folder
+                    final_part_dir = os.path.join(output_dir, table_name, part_dir)
+                    os.makedirs(final_part_dir, exist_ok=True)
+                    merged_part_df.write_parquet(os.path.join(final_part_dir, "part-0.parquet"))
+                else:
+                    # Keep combined partition DataFrame in memory
+                    table_dfs.append(merged_part_df)
+                    
+        if not original_streaming:
+            if table_dfs:
+                final_results[table_name] = pl.concat(table_dfs)
+            else:
+                final_results[table_name] = pl.DataFrame()
+                
+    # 6. Cleanup temporary worker chunk folders
+    temp_chunks_dir = os.path.join(output_dir, "temp_chunks")
+    if os.path.exists(temp_chunks_dir):
+        shutil.rmtree(temp_chunks_dir)
+        
+    if temp_dir_obj is not None:
+        temp_dir_obj.cleanup()
+        
+    return final_results
