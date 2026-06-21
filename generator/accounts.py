@@ -25,6 +25,7 @@ def generate_accounts(
     initial_products: pl.DataFrame,
     config: SimulationConfig,
     rng: Optional[np.random.Generator] = None,
+    account_id_start: int = ACCOUNT_ID_START,
 ) -> pl.DataFrame:
     """Generates the static account_master DataFrame.
 
@@ -67,7 +68,7 @@ def generate_accounts(
     }
 
     account_rows = []
-    current_account_id = ACCOUNT_ID_START
+    current_account_id = account_id_start
 
     for cid in spine.simulation_state["customer_id"].to_list():
         c_info = cust_data[cid]
