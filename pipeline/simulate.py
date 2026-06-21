@@ -30,7 +30,14 @@ from generator.accounts import generate_accounts
 from generator.cards import generate_cards
 from generator.loans import generate_loans
 from generator.spine import generate_spine
-from generator.transactions import generate_salary_credit, generate_non_salary_income, generate_regular_transactions, generate_fee_or_charge
+from generator.transactions import (
+    generate_salary_credit,
+    generate_non_salary_income,
+    generate_regular_transactions,
+    generate_fee_or_charge,
+    generate_monthly_regular_transactions,
+    generate_monthly_non_salary_income,
+)
 from generator.activity import generate_monthly_activity
 from generator.digital import generate_monthly_digital
 from generator.churn import calculate_churn, ChurnInput, ChurnResult
@@ -396,6 +403,49 @@ def run_simulation(
 
         resolved_complaints_this_month = set()
 
+        # Pre-identify primary account and salary/non-salary accounts for all active customers
+        non_salary_customers = []
+        primary_accs = {}
+        for c in active_customers:
+            cid = c["customer_id"]
+            c_accs = [a for a in accounts_by_customer.get(cid, []) if a["account_status"] == "Active"]
+            primary_acc = None
+            for acc in c_accs:
+                if acc["account_type"] == PRIMARY_ACCOUNT_TYPE:
+                    primary_acc = acc
+                    break
+            if primary_acc is None and c_accs:
+                primary_acc = c_accs[0]
+            
+            if primary_acc:
+                primary_accs[cid] = primary_acc
+                if not primary_acc["salary_account_flag"]:
+                    c_copy = dict(c)
+                    c_copy["account_id"] = primary_acc["account_id"]
+                    non_salary_customers.append(c_copy)
+
+        # Batch generate non-salary income credits
+        pregen_credits = generate_monthly_non_salary_income(
+            non_salary_customers, customer_events, snapshot_month, next_txn_id, rng
+        )
+        next_txn_id += len(pregen_credits)
+
+        # Batch generate regular debit transactions
+        pregen_debits = generate_monthly_regular_transactions(
+            active_customers, customer_events, snapshot_month, next_txn_id, rng
+        )
+        next_txn_id += len(pregen_debits)
+
+        # Group pre-generated transactions by customer_id
+        from collections import defaultdict
+        pregen_credits_by_cust = defaultdict(list)
+        for t in pregen_credits:
+            pregen_credits_by_cust[t["customer_id"]].append(t)
+
+        pregen_debits_by_cust = defaultdict(list)
+        for t in pregen_debits:
+            pregen_debits_by_cust[t["customer_id"]].append(t)
+
         for c in active_customers:
             cid = c["customer_id"]
             persona = Persona(c["persona"])
@@ -412,14 +462,7 @@ def run_simulation(
             card_pres = 0
             card_npres = 0
 
-            primary_acc = None
-            for acc in c_accs:
-                if acc["account_type"] == PRIMARY_ACCOUNT_TYPE:
-                    primary_acc = acc
-                    break
-            if primary_acc is None and c_accs:
-                primary_acc = c_accs[0]
-
+            primary_acc = primary_accs.get(cid)
             if not primary_acc:
                 continue
 
@@ -452,39 +495,17 @@ def run_simulation(
                     next_txn_id += 1
                     months_without_salary[cid] = 0
             else:
-                # Generate irregular/non-salary income credits
-                income_txns = generate_non_salary_income(
-                    next_txn_id, cid, acc_id, snapshot_month, persona, c["city"], c["state"], rng
-                )
-                cust_txns.extend(income_txns)
-                next_txn_id += len(income_txns)
+                cust_txns.extend(pregen_credits_by_cust.get(cid, []))
 
             # 3.2 Regular Transactions
-            if persona == Persona.DIGITAL_NATIVE:
-                lambda_days = 10
-            elif persona == Persona.DORMANT_WEALTHY:
-                lambda_days = 2
-            else:
-                lambda_days = 5
-
-            num_days = int(rng.poisson(lambda_days))
-            num_days = max(1, min(days_in_month, num_days))
-            txn_days = rng.choice(np.arange(1, days_in_month + 1), size=num_days, replace=False)
-
-            for day in txn_days:
-                txn_date = date(snapshot_month.year, snapshot_month.month, int(day))
-                day_txns = generate_regular_transactions(
-                    next_txn_id, cid, acc_id, txn_date, persona, c["city"], c["state"], rng, list(events)
-                )
-                next_txn_id += len(day_txns)
-                
-                cc = [card for card in cards_by_customer.get(cid, []) if card["card_type"] == "Credit" and card["card_status"] == "Active"]
-                for t in day_txns:
-                    if cc and rng.random() < 0.40:
-                        card_id = cc[0]["card_id"]
-                        running_card_spends[card_id] += t["amount"]
-                    else:
-                        cust_txns.append(t)
+            cc = [card for card in cards_by_customer.get(cid, []) if card["card_type"] == "Credit" and card["card_status"] == "Active"]
+            for t in pregen_debits_by_cust.get(cid, []):
+                t["account_id"] = acc_id
+                if cc and rng.random() < 0.40:
+                    card_id = cc[0]["card_id"]
+                    running_card_spends[card_id] += t["amount"]
+                else:
+                    cust_txns.append(t)
 
             # 3.3 Loan EMI Payment (Day 10)
             cust_loans = loans_by_customer.get(cid, [])
