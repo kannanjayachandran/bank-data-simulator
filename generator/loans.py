@@ -40,6 +40,7 @@ def generate_loans(
     initial_products: pl.DataFrame,
     config: SimulationConfig,
     rng: Optional[np.random.Generator] = None,
+    loan_id_start: int = LOAN_ID_START,
 ) -> pl.DataFrame:
     """Generates the static loan_master DataFrame.
 
@@ -75,7 +76,7 @@ def generate_loans(
     }
 
     loan_rows = []
-    current_loan_id = LOAN_ID_START
+    current_loan_id = loan_id_start
 
     for cid in spine.simulation_state["customer_id"].to_list():
         c_info = cust_data[cid]
