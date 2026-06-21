@@ -18,6 +18,7 @@ def main():
     parser.add_argument("--output-dir", default="./data/raw", help="Output directory for Parquet files")
     parser.add_argument("--postgres-uri", help="PostgreSQL connection URI (optional)")
     parser.add_argument("--duckdb-db", help="DuckDB file path to load data (optional)")
+    parser.add_argument("--jobs", type=int, default=1, help="Number of parallel jobs to run")
     
     args = parser.parse_args()
     
@@ -29,9 +30,9 @@ def main():
     )
     
     # 1. Run simulation
-    print(f"Running simulation for {config.n_customers} customers over {config.sim_months} months...")
+    print(f"Running simulation for {config.n_customers} customers over {config.sim_months} months with {args.jobs} job(s)...")
     start_time = time.time()
-    results = run_simulation(config, streaming=False)
+    results = run_simulation(config, streaming=False, jobs=args.jobs)
     sim_duration = time.time() - start_time
     print(f"✔ Simulation completed in {sim_duration:.2f} seconds.")
     
