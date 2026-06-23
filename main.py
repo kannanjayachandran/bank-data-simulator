@@ -29,18 +29,25 @@ def main():
         seed=args.seed
     )
     
-    # 1. Run simulation
-    print(f"Running simulation for {config.n_customers} customers over {config.sim_months} months with {args.jobs} job(s)...")
-    start_time = time.time()
-    results = run_simulation(config, streaming=False, jobs=args.jobs)
-    sim_duration = time.time() - start_time
-    print(f"✔ Simulation completed in {sim_duration:.2f} seconds.")
-    
     # Clean output dir
     if os.path.exists(args.output_dir):
         print(f"Cleaning old parquet directory: {args.output_dir}")
         shutil.rmtree(args.output_dir)
     os.makedirs(args.output_dir, exist_ok=True)
+
+    # 1. Run simulation
+    print(f"Running simulation for {config.n_customers} customers over {config.sim_months} months with {args.jobs} job(s)...")
+    start_time = time.time()
+    # Force streaming mode for multi-core jobs to maintain a flat memory footprint and avoid OOMs
+    streaming = args.jobs > 1
+    results = run_simulation(
+        config,
+        streaming=streaming,
+        output_dir=args.output_dir,
+        jobs=args.jobs
+    )
+    sim_duration = time.time() - start_time
+    print(f"✔ Simulation completed in {sim_duration:.2f} seconds.")
     
     # 2. Save Parquet
     print(f"Saving partitioned Parquet files to: {args.output_dir}...")
