@@ -38,4 +38,9 @@ FOIR_LIMITS = {
     "Home Loan": 0.50
 }
 
+# Minimum loan amounts for FOIR checking
+MIN_PERSONAL_LOAN_AMOUNT: float = 50_000.0
+MIN_HOME_LOAN_AMOUNT: float = 2_000_000.0
+
+
 
