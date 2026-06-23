@@ -23,13 +23,16 @@ from config.constants import (
     FEEDBACK_ID_START,
     PRIMARY_ACCOUNT_TYPE,
     CREDIT_LIMIT_MULTIPLIER,
+    FOIR_LIMITS,
+    MIN_PERSONAL_LOAN_AMOUNT,
+    MIN_HOME_LOAN_AMOUNT,
 )
 from generator.branches import generate_branches
 from generator.customers import generate_customers
 from generator.products import generate_initial_products
 from generator.accounts import generate_accounts
 from generator.cards import generate_cards
-from generator.loans import generate_loans
+from generator.loans import generate_loans, compute_max_principal
 from generator.spine import generate_spine
 from generator.transactions import (
     generate_salary_credit,
@@ -118,7 +121,7 @@ def run_simulation(
     customer_df = generate_customers(spine, config, rng)
     accounts_df = generate_accounts(spine, customer_df, initial_products, config, rng, account_id_start)
     cards_df = generate_cards(spine, customer_df, initial_products, accounts_df, config, rng, card_id_start)
-    loans_df = generate_loans(spine, customer_df, initial_products, config, rng, loan_id_start)
+    loans_df, initial_products = generate_loans(spine, customer_df, initial_products, config, rng, loan_id_start)
 
     # 2. Convert DataFrames to dicts/lists for runtime modifications
     customers = customer_df.to_dicts()
@@ -373,6 +376,18 @@ def run_simulation(
                                 sanctioned = 100000.0 if l_type == "Personal Loan" else 2000000.0
                                 rate = 12.5 if l_type == "Personal Loan" else 8.5
                                 tenure = 36 if l_type == "Personal Loan" else 180
+                                
+                                # Apply FOIR check mid-simulation too!
+                                monthly_income = c["annual_income"] / 12.0
+                                limit_pct = FOIR_LIMITS[l_type]
+                                max_emi = monthly_income * limit_pct
+                                min_amt = MIN_PERSONAL_LOAN_AMOUNT if l_type == "Personal Loan" else MIN_HOME_LOAN_AMOUNT
+                                foir_max_p = compute_max_principal(max_emi, rate, tenure)
+                                
+                                if foir_max_p < min_amt:
+                                    # Customer cannot afford this loan, revert product acquisition
+                                    holdings[new_prod] = False
+                                    continue
                                 
                                 R = rate / 12.0 / 100.0
                                 N = tenure
