@@ -14,10 +14,10 @@ class SimulationConfig(BaseModel):
     Uses Pydantic for automated field validation.
     """
 
-    # Note: Development default is set to 10,000 customers.
-    # The production target is 100,000 customers.
+    # Note: Development default is set to 2000 customers.
+    # The production target is 100,000 customers or beyond. (based on business priority)
     n_customers: int = Field(
-        default=10000,
+        default=2000,
         description="Total number of customers to generate in the synthetic spine.",
     )
 
@@ -53,7 +53,9 @@ class SimulationConfig(BaseModel):
     @classmethod
     def validate_sim_months(cls, v: int) -> int:
         if not (1 <= v <= 120):
-            raise ValueError("sim_months must be in the range [1, 120] (up to 10 years)")
+            raise ValueError(
+                "sim_months must be in the range [1, 120] (up to 10 years)"
+            )
         return v
 
     @field_validator("seed")
