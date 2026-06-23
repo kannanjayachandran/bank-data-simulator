@@ -33,14 +33,8 @@ BRANCH_METRO_WEIGHT: float = 2.0
 BRANCH_URBAN_WEIGHT: float = 1.0
 
 # Fixed Obligation to Income Ratio (FOIR) Limits
-FOIR_LIMITS = {
-    "Personal Loan": 0.40,
-    "Home Loan": 0.50
-}
+FOIR_LIMITS = {"Personal Loan": 0.40, "Home Loan": 0.50}
 
 # Minimum loan amounts for FOIR checking
 MIN_PERSONAL_LOAN_AMOUNT: float = 50_000.0
 MIN_HOME_LOAN_AMOUNT: float = 2_000_000.0
-
-
-

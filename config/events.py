@@ -116,7 +116,7 @@ EVENT_PROBABILITIES: Dict[Persona, Dict[HiddenEvent, float]] = {
 # These values specify the baseline monthly probability of a conditional event triggering,
 # provided that the customer satisfies the required prerequisite(s) during that simulation month.
 #
-# Event-specific Prerequisite Rules (Contract for Phase 2+):
+# Event-specific Prerequisite Rules:
 # 1. CARD_DECLINE_SPIKE:
 #    - Prerequisite: Customer holds at least one active card.
 #    - Logic: If met, sample probability from this table. If not, probability is 0.0.

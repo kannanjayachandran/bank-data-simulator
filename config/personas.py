@@ -274,7 +274,7 @@ PERSONA_CONFIGS: Dict[Persona, PersonaConfig] = {
     ),
 }
 
-# Churn thresholds by persona from spec Section 9.3
+# Churn thresholds by persona
 CHURN_THRESHOLDS: Dict[Persona, float] = {
     Persona.SALARY_CORE: 0.72,
     Persona.AFFLUENT_MULTI_PRODUCT: 0.78,
@@ -294,4 +294,3 @@ CHURN_COMPONENT_WEIGHTS: Dict[str, float] = {
     "loan_stress_score": 0.20,
     "digital_inactivity_score": 0.15,
 }
-
