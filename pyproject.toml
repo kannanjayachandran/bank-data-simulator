@@ -19,4 +19,5 @@ dev = [
     "line-profiler>=5.0.2",
     "memray>=1.19.3",
     "pytest>=9.1.0",
+    "ruff>=0.15.18",
 ]
