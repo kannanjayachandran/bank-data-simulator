@@ -59,7 +59,7 @@ def test_static_pipeline_and_foreign_keys():
     cards_df = generate_cards(spine, customers_df, products_df, accounts_df, config, rng)
 
     # 6. Generate Loans
-    loans_df = generate_loans(spine, customers_df, products_df, config, rng)
+    loans_df, products_df = generate_loans(spine, customers_df, products_df, config, rng)
 
     branches_df = generate_branches()
 
