@@ -117,6 +117,18 @@ def generate_complaints_for_month(
     return new_complaints
 
 
+SEVERITY_CSAT_PARAMS = {
+    "Low":    {"mean": 3.5, "std": 0.9},
+    "Medium": {"mean": 2.8, "std": 1.0},
+    "High":   {"mean": 2.0, "std": 1.0},
+}
+SEVERITY_RESOLUTION_DAYS = {
+    "Low":    (7, 25),
+    "Medium": (20, 45),
+    "High":   (35, 75),
+}
+
+
 def resolve_complaints_for_month(
     all_complaints: List[Dict[str, Any]],
     resolved_customer_ids: Set[int],
@@ -145,27 +157,15 @@ def resolve_complaints_for_month(
             comp["status"] = "Resolved"
             comp["resolved_flag"] = True
 
-            # Determine resolution date in the current month
-            # Assign resolution date randomly within the current month
-            if snapshot_month.month == 12:
-                next_month = date(snapshot_month.year + 1, 1, 1)
-            else:
-                next_month = date(snapshot_month.year, snapshot_month.month + 1, 1)
-            days_in_month = (next_month - snapshot_month).days
-            res_day = rng.integers(1, days_in_month + 1)
-            resolution_date = date(snapshot_month.year, snapshot_month.month, int(res_day))
-
-            resolution_days = (resolution_date - comp["complaint_date"]).days
-            # Ensure it is at least 1
-            resolution_days = max(1, resolution_days)
+            sev = comp["severity"]
+            
+            # Determine resolution days based on severity
+            low_days, high_days = SEVERITY_RESOLUTION_DAYS.get(sev, (15, 45))
+            resolution_days = int(rng.integers(low_days, high_days + 1))
             comp["resolution_days"] = resolution_days
 
-            # Determine CSAT score based on resolution speed
-            if resolution_days <= 15:
-                # Fast resolution gets high score
-                comp["csat_score"] = int(rng.choice([4, 5], p=[0.3, 0.7]))
-            elif resolution_days <= 45:
-                comp["csat_score"] = int(rng.choice([3, 4], p=[0.5, 0.5]))
-            else:
-                # Slow resolution gets low score
-                comp["csat_score"] = int(rng.choice([1, 2, 3], p=[0.4, 0.4, 0.2]))
+            # Determine CSAT score based on severity parameters
+            params = SEVERITY_CSAT_PARAMS.get(sev, {"mean": 3.0, "std": 1.0})
+            csat_val = rng.normal(params["mean"], params["std"])
+            csat_score = int(np.clip(np.round(csat_val), 1, 5))
+            comp["csat_score"] = csat_score
