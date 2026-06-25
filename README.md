@@ -110,19 +110,19 @@ uv pip install -e .
 
 ```bash
 # Quick validation run (2K customers, 4 cores)
-PYTHONPATH=. uv run python main.py --n-customers 2000 --sim-months 24 --jobs 4 --duckdb-db temp-test/bank_data.db
+PYTHONPATH=. uv run python main.py --n-customers 2000 --sim-months 24 --jobs 4 --duckdb-db data/bank_data_final.db
 
 # Full run (10K customers, 8 cores)
-PYTHONPATH=. uv run python main.py --n-customers 10000 --sim-months 24 --jobs 8 --duckdb-db temp-test/bank_data.db
+PYTHONPATH=. uv run python main.py --n-customers 10000 --sim-months 24 --jobs 8 --duckdb-db data/bank_data_final.db
 
 # Production run (100K customers, all cores)
-PYTHONPATH=. uv run python main.py --n-customers 100000 --sim-months 24 --jobs $(nproc) --duckdb-db data/bank_data.db
+PYTHONPATH=. uv run python main.py --n-customers 100000 --sim-months 24 --jobs $(nproc) --duckdb-db data/bank_data_final.db
 ```
 
 ### Validate output
 
 ```bash
-PYTHONPATH=. uv run python pipeline/validate.py --db temp-test/bank_data.db
+PYTHONPATH=. uv run python pipeline/validate.py --db data/bank_data_final.db
 ```
 
 ### Materialize features (SQL)
