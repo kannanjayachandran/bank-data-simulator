@@ -62,7 +62,72 @@ Spine Generation ──► Static Masters ──► Monthly Loop (x24) ──►
 5. **Feature Snapshots** — Computes 16 engineered features via native Polars expressions: tenure, product count, balance/txn/login trends, complaint counts, salary consistency, credit utilization, EMI-to-income ratio, dormant days, NPS average, campaign response rate, product acquisition velocity
 6. **Output** — Partitioned Parquet files + PostgreSQL bulk load (COPY FROM STDIN) + DuckDB in-memory analytics
 
-## 17 Output Tables
+## Output at a Glance (100k Customers, 24 Months)
+
+### Scale
+
+| Metric                | Value               |
+| --------------------- | ------------------- |
+| Customers             | 100,000             |
+| Transactions          | ~12.2 million       |
+| Feature snapshot rows | ~6.1 million        |
+| Churn label rows      | ~8.5 million        |
+| Simulation window     | Jan 2024 – Dec 2025 |
+| Prediction horizons   | 1, 3, 6, 12 months  |
+
+### Churn Distribution
+
+| Persona                 | Churn Rate |
+| ----------------------- | ---------- |
+| Complaint-Prone Churner | ~47%       |
+| Credit Stressed         | ~30%       |
+| Dormant Wealthy         | ~20%       |
+| Salary Core             | ~15%       |
+| Digital Native          | ~10%       |
+| Affluent Multi-Product  | ~6%        |
+
+Overall: **~21% cumulative churn over 24 months**
+
+### Churn Reasons
+
+| Reason                  | Share |
+| ----------------------- | ----- |
+| Voluntary closure       | 11.6% |
+| Service dissatisfaction | 6.6%  |
+| Loan default            | 2.1%  |
+| Account dormancy        | 0.3%  |
+| Salary account lost     | 0.2%  |
+| Service failure         | 0.1%  |
+
+### Pre-Engineered Features (in `churn_feature_snapshot`)
+
+Ready to use — no additional feature engineering required for a baseline model.
+
+- `tenure_months`
+- `products_count`
+- `balance_change_3m`
+- `txn_count_change_3m`, `login_count_change_6m`
+- `complaint_count_6m`
+- `unresolved_complaints`
+- `days_since_last_login`
+- `salary_credit_consistency`
+- `credit_utilization`
+- `emi_to_income_ratio`
+- `dormant_days`
+- `nps_avg_12m`
+- `campaign_response_rate` ·
+- `product_acquisition_velocity_6m`
+
+### Modeling Recommendations
+
+**Best starting point:** 3-month horizon labels + gradient boosting on `churn_feature_snapshot`. Train on as-of months Jan 2024 – Jun 2025, evaluate on Jul 2025 – Dec 2025.
+
+**Hardest subproblem:** `dormant_wealthy` churn — low complaint rates, high balances, subtle behavioral signals. A single model trained on all personas will underperform on this segment.
+
+**No class imbalance problem** at the 3-month horizon for `complaint_prone_churner` and
+`credit_stressed` — unlike real banking datasets which are heavily imbalanced and cannot be shared publicly.
+
+### 17 Output Tables
 
 | Table                        | Grain                                | Description                                              |
 | ---------------------------- | ------------------------------------ | -------------------------------------------------------- |
@@ -91,7 +156,6 @@ Spine Generation ──► Static Masters ──► Monthly Loop (x24) ──►
 | **Runtime**          | Python 3.13+                                |
 | **Data Core**        | Polars, NumPy, SciPy                        |
 | **Databases**        | DuckDB (analytics), PostgreSQL (production) |
-| **Concurrency**      | multiprocessing (spawn)                     |
 | **Localization**     | Faker (en_IN)                               |
 | **Validation**       | pytest                                      |
 | **Containerization** | Docker, Docker Compose                      |
@@ -112,11 +176,8 @@ uv pip install -e .
 # Quick validation run (2K customers, 4 cores)
 PYTHONPATH=. uv run python main.py --n-customers 2000 --sim-months 24 --jobs 4 --duckdb-db data/bank_data_final.db
 
-# Full run (10K customers, 8 cores)
-PYTHONPATH=. uv run python main.py --n-customers 10000 --sim-months 24 --jobs 8 --duckdb-db data/bank_data_final.db
-
-# Production run (100K customers, all cores)
-PYTHONPATH=. uv run python main.py --n-customers 100000 --sim-months 24 --jobs $(nproc) --duckdb-db data/bank_data_final.db
+# 100K customers
+PYTHONPATH=. uv run python main.py --n-customers 100000 --sim-months 24 --jobs $(nproc) --duckdb-db data/bank_data.db
 ```
 
 ### Validate output
