@@ -28,10 +28,6 @@ PRIMARY_ACCOUNT_TYPE: str = "Savings"
 PERSONAL_LOAN_TENURE_RANGE: Tuple[int, int] = (12, 60)
 HOME_LOAN_TENURE_RANGE: Tuple[int, int] = (120, 240)
 
-# Branch Selection Weights
-BRANCH_METRO_WEIGHT: float = 2.0
-BRANCH_URBAN_WEIGHT: float = 1.0
-
 # Fixed Obligation to Income Ratio (FOIR) Limits
 FOIR_LIMITS = {"Personal Loan": 0.40, "Home Loan": 0.50}
 
