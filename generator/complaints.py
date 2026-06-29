@@ -4,20 +4,30 @@ Handles monthly complaints generation based on persona profiles and active event
 and resolves complaints with a minimum 1-month lag.
 """
 
-from datetime import date, timedelta
+from datetime import date
 from typing import List, Dict, Any, Set
 import numpy as np
-import polars as pl
 
 from config.personas import PERSONA_CONFIGS, Persona
-from config.constants import COMPLAINT_ID_START
 
 # Channel and Category options
 CHANNELS = ["Call Center", "Mobile App", "Branch", "Web"]
 SEVERITIES = ["Low", "Medium", "High"]
 
-DEFAULT_CATEGORIES = ["Billing", "Service", "Transaction", "Tech Issue", "Account Access"]
-DEFAULT_ROOT_CAUSES = ["Unclear Charge Description", "Staff Behavior", "UI Glitch", "Wrong Statement", "Slow Response Time"]
+DEFAULT_CATEGORIES = [
+    "Billing",
+    "Service",
+    "Transaction",
+    "Tech Issue",
+    "Account Access",
+]
+DEFAULT_ROOT_CAUSES = [
+    "Unclear Charge Description",
+    "Staff Behavior",
+    "UI Glitch",
+    "Wrong Statement",
+    "Slow Response Time",
+]
 
 
 def generate_complaints_for_month(
@@ -56,7 +66,9 @@ def generate_complaints_for_month(
 
         # Determine complaint probability
         p_config = PERSONA_CONFIGS[persona]
-        base_prob = rng.uniform(p_config.complaint_rate_min, p_config.complaint_rate_max)
+        base_prob = rng.uniform(
+            p_config.complaint_rate_min, p_config.complaint_rate_max
+        )
 
         # Event-driven boosts
         event_boost = 0.0
@@ -118,14 +130,14 @@ def generate_complaints_for_month(
 
 
 SEVERITY_CSAT_PARAMS = {
-    "Low":    {"mean": 3.5, "std": 0.9},
+    "Low": {"mean": 3.5, "std": 0.9},
     "Medium": {"mean": 2.8, "std": 1.0},
-    "High":   {"mean": 2.0, "std": 1.0},
+    "High": {"mean": 2.0, "std": 1.0},
 }
 SEVERITY_RESOLUTION_DAYS = {
-    "Low":    (7, 25),
+    "Low": (7, 25),
     "Medium": (20, 45),
-    "High":   (35, 75),
+    "High": (35, 75),
 }
 
 
@@ -158,7 +170,7 @@ def resolve_complaints_for_month(
             comp["resolved_flag"] = True
 
             sev = comp["severity"]
-            
+
             # Determine resolution days based on severity
             low_days, high_days = SEVERITY_RESOLUTION_DAYS.get(sev, (15, 45))
             resolution_days = int(rng.integers(low_days, high_days + 1))
