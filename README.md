@@ -30,11 +30,11 @@ The simulator is built for speed with heavy NumPy vectorization, Polars-native f
 
 ### Benchmarks (100k Customers, 24 Months, ~12M Transactions)
 
-| Hardware | Jobs | Mode | Wall Clock | Peak RAM | CPU Utilization |
-| --- | --- | --- | --- | --- | --- |
-| Ryzen 5 3550H, 8GB (laptop) | 1 | sequential, pre-optimization | ~700s | ~1.1GB | ~100% |
-| Ryzen 5 3550H, 8GB (laptop) | 4 | streaming | **254s** | ~1.2GB | ~370% |
-| AWS c7i.xlarge, 8GB (4 vCPU Xeon) | 4 | streaming | **208s** | **2.57GB** | **372%** |
+| Hardware                          | Jobs | Mode                         | Wall Clock | Peak RAM   | CPU Utilization |
+| --------------------------------- | ---- | ---------------------------- | ---------- | ---------- | --------------- |
+| Ryzen 5 3550H, 8GB (laptop)       | 1    | sequential, pre-optimization | ~1670s (≈ 28 minutes)      | ~1.1GB     | ~100%           |
+| Ryzen 5 3550H, 8GB (laptop)       | 4    | streaming                    | **244s**   | ~1.2GB     | ~370%           |
+| AWS c7i.xlarge, 8GB (4 vCPU Xeon) | 4    | streaming                    | **208s**   | **2.57GB** | **372%**        |
 
 > The AWS c7i.xlarge run achieved 372% CPU utilization on 4 cores — near-perfect parallel efficiency with essentially zero coordination overhead between workers.
 
@@ -75,38 +75,38 @@ Spine Generation ──► Static Masters ──► Monthly Loop (x24) ──►
 
 ### Scale
 
-| Metric | Value |
-| --- | --- |
-| Customers | 100,000 |
-| Transactions | ~12.2 million |
-| Feature snapshot rows | ~6.1 million |
-| Churn label rows | ~8.5 million |
-| Simulation window | Jan 2024 – Dec 2025 |
-| Prediction horizons | 1, 3, 6, 12 months |
+| Metric                | Value               |
+| --------------------- | ------------------- |
+| Customers             | 100,000             |
+| Transactions          | ~12.2 million       |
+| Feature snapshot rows | ~6.1 million        |
+| Churn label rows      | ~8.5 million        |
+| Simulation window     | Jan 2024 – Dec 2025 |
+| Prediction horizons   | 1, 3, 6, 12 months  |
 
 ### Churn Distribution
 
-| Persona | Churn Rate |
-| --- | --- |
-| Complaint-Prone Churner | ~47% |
-| Credit Stressed | ~30% |
-| Dormant Wealthy | ~20% |
-| Salary Core | ~15% |
-| Digital Native | ~10% |
-| Affluent Multi-Product | ~6% |
+| Persona                 | Churn Rate |
+| ----------------------- | ---------- |
+| Complaint-Prone Churner | ~47%       |
+| Credit Stressed         | ~30%       |
+| Dormant Wealthy         | ~20%       |
+| Salary Core             | ~15%       |
+| Digital Native          | ~10%       |
+| Affluent Multi-Product  | ~6%        |
 
 Overall: **~21% cumulative churn over 24 months**
 
 ### Churn Reasons
 
-| Reason | Share |
-| --- | --- |
-| Voluntary closure | 11.6% |
-| Service dissatisfaction | 6.6% |
-| Loan default | 2.1% |
-| Account dormancy | 0.3% |
-| Salary account lost | 0.2% |
-| Service failure | 0.1% |
+| Reason                  | Share |
+| ----------------------- | ----- |
+| Voluntary closure       | 11.6% |
+| Service dissatisfaction | 6.6%  |
+| Loan default            | 2.1%  |
+| Account dormancy        | 0.3%  |
+| Salary account lost     | 0.2%  |
+| Service failure         | 0.1%  |
 
 ### Pre-Engineered Features (in `churn_feature_snapshot`)
 
@@ -138,37 +138,37 @@ Ready to use — no additional feature engineering required for a baseline model
 
 ## 17 Output Tables
 
-| Table | Grain | Description |
-| --- | --- | --- |
-| `branch_master` | 1 per branch | 10 branches across Indian metros/urban cities |
-| `customer_master` | 1 per customer | Demographics, income, KYC, location |
-| `account_master` | 1 per account | Savings/Current accounts, salary flags, overdraft |
-| `account_monthly_snapshot` | 1 per account per month | Balance metrics, deposit/withdrawal counts, fees |
-| `card_portfolio` | 1 per card | Debit/Credit cards, network, rewards tier, credit limits |
-| `card_monthly_snapshot` | 1 per card per month | Spend, utilization rate, payments, delinquency |
-| `loan_master` | 1 per loan | Personal/Home loans, sanctioned amount, EMI, tenure |
-| `loan_monthly_snapshot` | 1 per loan per month | Outstanding, DPD, overdue, principal/interest paid |
-| `product_holdings_monthly` | 1 per customer per month | 10 product flags + products_count |
-| `transaction_fact` | 1 per transaction | Salary, UPI, POS, ATM, EMI, fees; 20+ columns |
-| `customer_monthly_activity` | 1 per customer per month | Logins, sessions, txn counts, merchant diversity |
-| `digital_engagement_monthly` | 1 per customer per month | App activity, notifications, campaigns, web sessions |
-| `customer_complaints` | 1 per complaint | Channel, category, severity, CSAT, resolution |
-| `customer_feedback` | 1 per feedback | NPS, CSAT survey responses |
-| `churn_simulation_state` | 1 per customer | Persona, churn month, churn reason, low-sensitivity flag |
-| `customer_churn_label` | 1 per customer per as-of per horizon | Churned flag, date, reason for 1/3/6/12 month horizons |
-| `churn_feature_snapshot` | 1 per customer per as-of per horizon | 16 engineered features + label columns |
+| Table                        | Grain                                | Description                                              |
+| ---------------------------- | ------------------------------------ | -------------------------------------------------------- |
+| `branch_master`              | 1 per branch                         | 10 branches across Indian metros/urban cities            |
+| `customer_master`            | 1 per customer                       | Demographics, income, KYC, location                      |
+| `account_master`             | 1 per account                        | Savings/Current accounts, salary flags, overdraft        |
+| `account_monthly_snapshot`   | 1 per account per month              | Balance metrics, deposit/withdrawal counts, fees         |
+| `card_portfolio`             | 1 per card                           | Debit/Credit cards, network, rewards tier, credit limits |
+| `card_monthly_snapshot`      | 1 per card per month                 | Spend, utilization rate, payments, delinquency           |
+| `loan_master`                | 1 per loan                           | Personal/Home loans, sanctioned amount, EMI, tenure      |
+| `loan_monthly_snapshot`      | 1 per loan per month                 | Outstanding, DPD, overdue, principal/interest paid       |
+| `product_holdings_monthly`   | 1 per customer per month             | 10 product flags + products_count                        |
+| `transaction_fact`           | 1 per transaction                    | Salary, UPI, POS, ATM, EMI, fees; 20+ columns            |
+| `customer_monthly_activity`  | 1 per customer per month             | Logins, sessions, txn counts, merchant diversity         |
+| `digital_engagement_monthly` | 1 per customer per month             | App activity, notifications, campaigns, web sessions     |
+| `customer_complaints`        | 1 per complaint                      | Channel, category, severity, CSAT, resolution            |
+| `customer_feedback`          | 1 per feedback                       | NPS, CSAT survey responses                               |
+| `churn_simulation_state`     | 1 per customer                       | Persona, churn month, churn reason, low-sensitivity flag |
+| `customer_churn_label`       | 1 per customer per as-of per horizon | Churned flag, date, reason for 1/3/6/12 month horizons   |
+| `churn_feature_snapshot`     | 1 per customer per as-of per horizon | 16 engineered features + label columns                   |
 
 ## Technology Stack
 
-| Component | Tool |
-| --- | --- |
-| **Runtime** | Python 3.13+ |
-| **Data Core** | Polars, NumPy, SciPy |
-| **Databases** | DuckDB (analytics), PostgreSQL (production) |
-| **Concurrency** | multiprocessing (spawn) |
-| **Localization** | Faker (en_IN) |
-| **Validation** | pytest |
-| **Containerization** | Docker, Docker Compose |
+| Component            | Tool                                        |
+| -------------------- | ------------------------------------------- |
+| **Runtime**          | Python 3.13+                                |
+| **Data Core**        | Polars, NumPy, SciPy                        |
+| **Databases**        | DuckDB (analytics), PostgreSQL (production) |
+| **Concurrency**      | multiprocessing (spawn)                     |
+| **Localization**     | Faker (en_IN)                               |
+| **Validation**       | pytest                                      |
+| **Containerization** | Docker, Docker Compose                      |
 
 ## Quickstart
 
@@ -224,15 +224,15 @@ Launches PostgreSQL 15, waits for health check, runs simulator, loads 1K custome
 
 ## CLI Reference
 
-| Argument | Default | Description |
-| --- | --- | --- |
-| `--n-customers` | 1000 | Number of customers to simulate |
-| `--sim-months` | 24 | Simulation duration in months |
-| `--seed` | 42 | RNG seed for reproducibility |
-| `--output-dir` | ./data/raw | Parquet output directory |
-| `--postgres-uri` | — | PostgreSQL connection URI (optional) |
-| `--duckdb-db` | — | DuckDB file path (optional) |
-| `--jobs` | 1 | Parallel worker count |
+| Argument         | Default    | Description                          |
+| ---------------- | ---------- | ------------------------------------ |
+| `--n-customers`  | 1000       | Number of customers to simulate      |
+| `--sim-months`   | 24         | Simulation duration in months        |
+| `--seed`         | 42         | RNG seed for reproducibility         |
+| `--output-dir`   | ./data/raw | Parquet output directory             |
+| `--postgres-uri` | —          | PostgreSQL connection URI (optional) |
+| `--duckdb-db`    | —          | DuckDB file path (optional)          |
+| `--jobs`         | 1          | Parallel worker count                |
 
 ## Parallel Execution
 
@@ -240,22 +240,22 @@ The `--jobs` flag splits customers into evenly sized chunks with pre-computed di
 
 On machines with sufficient RAM, streaming can be disabled for faster in-memory merges. Safe thresholds:
 
-| RAM | Max customers (streaming off) |
-| --- | --- |
-| 16GB | ~200k |
-| 32GB | ~350k |
-| 64GB | ~500k |
+| RAM  | Max customers (streaming off) |
+| ---- | ----------------------------- |
+| 16GB | ~200k                         |
+| 32GB | ~350k                         |
+| 64GB | ~500k                         |
 
 ## Personas
 
-| Persona | Income | Digital Engagement | Complaint Rate | Base Monthly Churn |
-| --- | --- | --- | --- | --- |
-| Salary Core | ₹3L–₹12L | High | Low | 0.3%–1.0% |
-| Affluent Multi-Product | ₹12L–₹60L | Medium-High | Low | 0.1%–0.6% |
-| Digital Native | ₹4L–₹20L | Very High | Low-Medium | 0.2%–0.8% |
-| Credit Stressed | ₹2.5L–₹10L | Medium | High | 1.0%–3.0% |
-| Dormant Wealthy | ₹15L–₹1Cr | Low | Low | 0.4%–1.5% |
-| Complaint-Prone Churner | ₹3L–₹15L | Medium | Very High | 2.0%–5.0% |
+| Persona                 | Income     | Digital Engagement | Complaint Rate | Base Monthly Churn |
+| ----------------------- | ---------- | ------------------ | -------------- | ------------------ |
+| Salary Core             | ₹3L–₹12L   | High               | Low            | 0.3%–1.0%          |
+| Affluent Multi-Product  | ₹12L–₹60L  | Medium-High        | Low            | 0.1%–0.6%          |
+| Digital Native          | ₹4L–₹20L   | Very High          | Low-Medium     | 0.2%–0.8%          |
+| Credit Stressed         | ₹2.5L–₹10L | Medium             | High           | 1.0%–3.0%          |
+| Dormant Wealthy         | ₹15L–₹1Cr  | Low                | Low            | 0.4%–1.5%          |
+| Complaint-Prone Churner | ₹3L–₹15L   | Medium             | Very High      | 2.0%–5.0%          |
 
 ## Churn Modeling
 
@@ -275,3 +275,4 @@ flowchart LR
 
 A[Loan default] --> B[Salary account lost] --> C[Service dissatisfaction] --> D[Account dormancy] --> E[Product disengagement] --> F[Service failure] --> G[Voluntary closure]
 ```
+
