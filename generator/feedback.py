@@ -9,7 +9,6 @@ from typing import List, Dict, Any, Set
 import numpy as np
 
 from config.personas import Persona
-from config.constants import FEEDBACK_ID_START
 
 SURVEY_CHANNELS = ["SMS", "Email", "In-App Push"]
 
@@ -17,7 +16,9 @@ SURVEY_CHANNELS = ["SMS", "Email", "In-App Push"]
 def generate_feedback_for_month(
     active_customers: List[Dict[str, Any]],
     resolved_complaints_this_month: Set[int],  # Customer IDs with resolved complaints
-    unresolved_complaints_counts: Dict[int, int],  # Customer ID -> open complaints count
+    unresolved_complaints_counts: Dict[
+        int, int
+    ],  # Customer ID -> open complaints count
     customer_events: Dict[int, Set[str]],
     snapshot_month: date,
     current_max_id: int,
@@ -84,7 +85,7 @@ def generate_feedback_for_month(
         cust = cust_lookup.get(cid)
         if not cust:
             continue
-        
+
         persona = Persona(cust["persona"])
         events = customer_events.get(cid, set())
         open_complaints = unresolved_complaints_counts.get(cid, 0)
