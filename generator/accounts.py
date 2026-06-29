@@ -5,18 +5,14 @@ and customer locations.
 """
 
 from typing import Optional
+
 import numpy as np
 import polars as pl
 
 from config.constants import ACCOUNT_ID_START
 from config.personas import Persona
 from config.simulation import SimulationConfig
-from generator.branches import BRANCH_DATA
 from generator.spine import Spine
-
-
-# Map city to branch code for fast lookup
-CITY_TO_BRANCH = {b["city"]: b["branch_code"] for b in BRANCH_DATA}
 
 
 def generate_accounts(
@@ -44,8 +40,7 @@ def generate_accounts(
 
     # Map customer_id to persona from spine
     spine_personas = {
-        row["customer_id"]: row["persona"]
-        for row in spine.simulation_state.to_dicts()
+        row["customer_id"]: row["persona"] for row in spine.simulation_state.to_dicts()
     }
 
     # Convert customer and product data to dicts for fast iteration
@@ -53,6 +48,7 @@ def generate_accounts(
         row["customer_id"]: {
             "customer_since": row["customer_since"],
             "city": row["city"],
+            "branch_code": row.get("branch_code", "B001"),
             "persona": spine_personas[row["customer_id"]],
             "annual_income": row["annual_income"],
         }
@@ -74,8 +70,7 @@ def generate_accounts(
         c_info = cust_data[cid]
         p_info = prod_data[cid]
 
-        # Home branch mapping based on city
-        branch_code = CITY_TO_BRANCH.get(c_info["city"], "B001")
+        branch_code = c_info.get("branch_code", "B001")
 
         # 1. Savings account creation
         if p_info["savings"]:
