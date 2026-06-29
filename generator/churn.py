@@ -10,7 +10,12 @@ import math
 from typing import Optional
 import numpy as np
 
-from config.personas import CHURN_COMPONENT_WEIGHTS, CHURN_THRESHOLDS, PERSONA_CONFIGS, Persona
+from config.personas import (
+    CHURN_COMPONENT_WEIGHTS,
+    CHURN_THRESHOLDS,
+    PERSONA_CONFIGS,
+    Persona,
+)
 
 
 @dataclass
@@ -84,11 +89,21 @@ def calculate_churn(
     """
     # 1. Evaluate Churn Triggers (Hard Triggers & Salary Loss)
     # These force churn (prob=1.0) and map directly to specific reasons.
-    is_loan_default = input_data.loan_status == "Delinquent" and input_data.dpd_days >= 90
-    is_salary_lost = input_data.recent_salary_job_change and input_data.months_without_salary >= 2
-    is_service_dissatisfaction = input_data.complaint_count_6m >= 4 and input_data.unresolved_complaints >= 2
-    is_dormancy = input_data.current_balance < 500.0 and input_data.months_without_salary >= 3
-    is_service_failure = input_data.service_failures_2m >= 2 and input_data.digital_inactive_months >= 2
+    is_loan_default = (
+        input_data.loan_status == "Delinquent" and input_data.dpd_days >= 90
+    )
+    is_salary_lost = (
+        input_data.recent_salary_job_change and input_data.months_without_salary >= 2
+    )
+    is_service_dissatisfaction = (
+        input_data.complaint_count_6m >= 4 and input_data.unresolved_complaints >= 2
+    )
+    is_dormancy = (
+        input_data.current_balance < 500.0 and input_data.months_without_salary >= 3
+    )
+    is_service_failure = (
+        input_data.service_failures_2m >= 2 and input_data.digital_inactive_months >= 2
+    )
     is_voluntary_close = input_data.core_account_closed
 
     has_hard_trigger = (
@@ -152,11 +167,19 @@ def calculate_churn(
     if churned:
         if input_data.dpd_days >= 90 or input_data.loan_status == "Delinquent":
             churn_reason = "Loan default"
-        elif input_data.months_without_salary >= 2 and input_data.recent_salary_job_change:
+        elif (
+            input_data.months_without_salary >= 2
+            and input_data.recent_salary_job_change
+        ):
             churn_reason = "Salary account lost"
-        elif input_data.unresolved_complaints >= 1 or input_data.complaint_count_6m >= 2:
+        elif (
+            input_data.unresolved_complaints >= 1 or input_data.complaint_count_6m >= 2
+        ):
             churn_reason = "Service dissatisfaction"
-        elif input_data.current_balance < 500.0 or input_data.digital_inactive_months >= 2:
+        elif (
+            input_data.current_balance < 500.0
+            or input_data.digital_inactive_months >= 2
+        ):
             churn_reason = "Account dormancy"
         elif input_data.products_count_drop:
             churn_reason = "Product disengagement"
