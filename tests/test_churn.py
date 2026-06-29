@@ -2,7 +2,7 @@
 
 import numpy as np
 from config.personas import Persona
-from generator.churn import ChurnInput, ChurnResult, calculate_churn
+from generator.churn import ChurnInput, calculate_churn
 
 
 def test_safe_sigmoid_limits():
@@ -203,21 +203,12 @@ def test_normal_churn_reason_priorities():
 
 def test_threshold_vs_bernoulli_churn():
     """Verify behavior differences between thresholded (deterministic) and Bernoulli (probabilistic) churn decisions."""
-    # Persona: SALARY_CORE (threshold: 0.72)
-    # 1. Thresholded check
-    rng = np.random.default_rng(100)
-
-    # Set risk just below threshold
-    # Threshold = 0.72 -> risk threshold = ln(0.72 / 0.28) = 0.9444
-    inp_low = ChurnInput(persona=Persona.SALARY_CORE, base_rate=0.9)  # risk = 0.9 + noise. noise has mean 0.
-    # We choose static inputs that give a deterministic risk (without noise for verification, but noise is random.
-    # To test threshold cleanly, we override/force risk by setting a base_rate to offset noise).
-    # Since noise is random, let's run it many times to confirm it splits at the threshold.
-    
-    # Alternatively, we can verify that Bernoulli decision behaves statistically
+    # Verify that Bernoulli decision behaves statistically
     # over many trials.
     bernoulli_churns = 0
-    inp_mid = ChurnInput(persona=Persona.SALARY_CORE, base_rate=0.0)  # churn_prob will be around 0.5
+    inp_mid = ChurnInput(
+        persona=Persona.SALARY_CORE, base_rate=0.0
+    )  # churn_prob will be around 0.5
     for seed in range(500):
         rng_t = np.random.default_rng(seed)
         res = calculate_churn(inp_mid, rng_t, use_threshold=False)

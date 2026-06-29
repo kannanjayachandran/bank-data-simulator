@@ -15,6 +15,7 @@ EXPECTED_SCHEMA: Dict[str, Dict[str, Tuple[str, bool]]] = {
         "branch_type": ("VARCHAR(30)", False),
         "open_date": ("DATE", False),
         "closure_date": ("DATE", True),
+        "customer_weight": ("INT", False),
     },
     "customer_master": {
         "customer_id": ("BIGINT", False),
@@ -288,61 +289,69 @@ def parse_ddl_schema(ddl_path: str) -> Dict[str, Dict[str, Tuple[str, bool]]]:
         line_clean = re.sub(r"--.*$", "", line).strip()
         if line_clean:
             content_lines.append(line_clean)
-    
+
     clean_ddl = " ".join(content_lines)
-    
+
     # Split by semicolon to get statements
     statements = clean_ddl.split(";")
-    
+
     parsed_schema = {}
-    
+
     for stmt in statements:
         stmt = stmt.strip()
         if not stmt:
             continue
-            
+
         # Match CREATE TABLE statement
         match = re.match(r"CREATE\s+TABLE\s+(\w+)\s*\((.*)\)", stmt, re.IGNORECASE)
         if not match:
             continue
-            
+
         table_name = match.group(1).lower()
         cols_def_str = match.group(2)
-        
+
         column_definitions = split_table_columns(cols_def_str)
         table_cols = {}
         pk_cols: Set[str] = set()
-        
+
         # Parse table constraints first
         for col_def in column_definitions:
             col_def_upper = col_def.upper()
             if col_def_upper.startswith("PRIMARY KEY"):
                 # Table constraint: PRIMARY KEY (col1, col2)
-                pk_match = re.search(r"PRIMARY\s+KEY\s*\((.*?)\)", col_def, re.IGNORECASE)
+                pk_match = re.search(
+                    r"PRIMARY\s+KEY\s*\((.*?)\)", col_def, re.IGNORECASE
+                )
                 if pk_match:
                     for pk_col in pk_match.group(1).split(","):
                         pk_cols.add(pk_col.strip().lower())
-        
+
         for col_def in column_definitions:
             col_def_upper = col_def.upper()
-            
+
             # Skip table level constraints
             tokens = col_def.split()
             if not tokens:
                 continue
-                
+
             first_token = tokens[0].upper()
-            if first_token in ("PRIMARY", "FOREIGN", "CONSTRAINT", "UNIQUE") and len(tokens) > 1 and tokens[1].upper() in ("KEY", "("):
+            if (
+                first_token in ("PRIMARY", "FOREIGN", "CONSTRAINT", "UNIQUE")
+                and len(tokens) > 1
+                and tokens[1].upper() in ("KEY", "(")
+            ):
                 continue
-                
+
             col_name = tokens[0].lower()
-            
+
             # Match data type (handles VARCHAR(20), NUMERIC(18,2) etc.)
-            type_match = re.search(r"^\w+(?:\s*\(\s*\d+\s*(?:,\s*\d+\s*)?\))?", tokens[1], re.IGNORECASE)
+            type_match = re.search(
+                r"^\w+(?:\s*\(\s*\d+\s*(?:,\s*\d+\s*)?\))?", tokens[1], re.IGNORECASE
+            )
             type_str = tokens[1]
             if type_match:
                 type_str = type_match.group(0).upper().replace(" ", "")
-            
+
             # Nullability determination
             is_nullable = True
             if "NOT NULL" in col_def_upper:
@@ -350,17 +359,17 @@ def parse_ddl_schema(ddl_path: str) -> Dict[str, Dict[str, Tuple[str, bool]]]:
             elif "PRIMARY KEY" in col_def_upper:
                 is_nullable = False
                 pk_cols.add(col_name)
-            
+
             table_cols[col_name] = (type_str, is_nullable)
-            
+
         # Retrofit composite primary keys to NOT NULL
         for col_name in table_cols:
             if col_name in pk_cols:
                 type_str, _ = table_cols[col_name]
                 table_cols[col_name] = (type_str, False)
-                
+
         parsed_schema[table_name] = table_cols
-        
+
     return parsed_schema
 
 
@@ -369,37 +378,43 @@ def test_schema_ddl_contract():
     # Find schema.sql path
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     schema_path = os.path.join(base_dir, "pipeline", "schema.sql")
-    
+
     assert os.path.exists(schema_path), f"schema.sql not found at {schema_path}!"
-    
+
     parsed = parse_ddl_schema(schema_path)
-    
+
     # Assert all tables exist in DDL
     for table_name in EXPECTED_SCHEMA:
-        assert table_name in parsed, f"Table {table_name} is missing in pipeline/schema.sql DDL!"
-        
+        assert table_name in parsed, (
+            f"Table {table_name} is missing in pipeline/schema.sql DDL!"
+        )
+
         expected_cols = EXPECTED_SCHEMA[table_name]
         parsed_cols = parsed[table_name]
-        
+
         # Verify columns count and names
         for col_name in expected_cols:
-            assert col_name in parsed_cols, f"Column '{col_name}' is missing in table '{table_name}' in schema.sql DDL!"
-            
+            assert col_name in parsed_cols, (
+                f"Column '{col_name}' is missing in table '{table_name}' in schema.sql DDL!"
+            )
+
             expected_type, expected_null = expected_cols[col_name]
             parsed_type, parsed_null = parsed_cols[col_name]
-            
+
             # Assert exact types
             assert parsed_type == expected_type, (
                 f"Data type mismatch for {table_name}.{col_name}: "
                 f"expected {expected_type}, got {parsed_type} in DDL!"
             )
-            
+
             # Assert exact nullability
             assert parsed_null == expected_null, (
                 f"Nullability mismatch for {table_name}.{col_name}: "
                 f"expected nullable={expected_null}, got nullable={parsed_null} in DDL!"
             )
-            
+
         # Assert no unexpected columns in parsed schema
         for col_name in parsed_cols:
-            assert col_name in expected_cols, f"Unexpected column '{col_name}' in table '{table_name}' inside schema.sql DDL!"
+            assert col_name in expected_cols, (
+                f"Unexpected column '{col_name}' in table '{table_name}' inside schema.sql DDL!"
+            )

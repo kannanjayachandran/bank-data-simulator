@@ -47,12 +47,18 @@ def test_persona_product_uptake_contains_all_11_products():
         missing_products = expected_products - actual_products
         extra_products = actual_products - expected_products
 
-        assert not missing_products, f"{persona.value} is missing products: {missing_products}"
-        assert not extra_products, f"{persona.value} has extra unexpected products: {extra_products}"
+        assert not missing_products, (
+            f"{persona.value} is missing products: {missing_products}"
+        )
+        assert not extra_products, (
+            f"{persona.value} has extra unexpected products: {extra_products}"
+        )
 
         # Verify that all probabilities are between 0 and 1
         for product, prob in config.product_uptake_probs.items():
-            assert 0.0 <= prob <= 1.0, f"{persona.value} has invalid probability for {product}: {prob}"
+            assert 0.0 <= prob <= 1.0, (
+                f"{persona.value} has invalid probability for {product}: {prob}"
+            )
 
 
 def test_persona_parameter_sanity_bounds():
@@ -71,7 +77,9 @@ def test_persona_parameter_sanity_bounds():
         assert 0.0 <= config.complaint_rate_min <= config.complaint_rate_max <= 1.0
 
         # Base monthly churn logic
-        assert 0.0 <= config.base_monthly_churn_min <= config.base_monthly_churn_max <= 1.0
+        assert (
+            0.0 <= config.base_monthly_churn_min <= config.base_monthly_churn_max <= 1.0
+        )
 
         # Sigma noise positive
         assert 0.0 < config.sigma_noise <= 0.50
@@ -110,15 +118,24 @@ def test_cross_persona_invariants():
     def beta_mean(a: float, b: float) -> float:
         return a / (a + b)
 
-    dn_mean = beta_mean(digital_native.digital_engagement_beta_a, digital_native.digital_engagement_beta_b)
-    dw_mean = beta_mean(dormant_wealthy.digital_engagement_beta_a, dormant_wealthy.digital_engagement_beta_b)
-    
+    dn_mean = beta_mean(
+        digital_native.digital_engagement_beta_a,
+        digital_native.digital_engagement_beta_b,
+    )
+    dw_mean = beta_mean(
+        dormant_wealthy.digital_engagement_beta_a,
+        dormant_wealthy.digital_engagement_beta_b,
+    )
+
     assert dn_mean > dw_mean
     for p, config in PERSONA_CONFIGS.items():
         if p != Persona.DIGITAL_NATIVE:
-            p_mean = beta_mean(config.digital_engagement_beta_a, config.digital_engagement_beta_b)
+            p_mean = beta_mean(
+                config.digital_engagement_beta_a, config.digital_engagement_beta_b
+            )
             assert dn_mean > p_mean
         if p != Persona.DORMANT_WEALTHY:
-            p_mean = beta_mean(config.digital_engagement_beta_a, config.digital_engagement_beta_b)
+            p_mean = beta_mean(
+                config.digital_engagement_beta_a, config.digital_engagement_beta_b
+            )
             assert dw_mean < p_mean
-

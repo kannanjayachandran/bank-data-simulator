@@ -9,7 +9,7 @@ from config.simulation import SimulationConfig
 def test_simulation_config_defaults():
     """Verify that the SimulationConfig default values are correct."""
     config = SimulationConfig()
-    assert config.n_customers == 10000
+    assert config.n_customers == 2000
     assert config.sim_start == date(2024, 1, 1)
     assert config.sim_months == 24
     assert config.seed == 42
@@ -68,4 +68,3 @@ def test_simulation_config_sim_start_normalization():
 
     config_end_of_month = SimulationConfig(sim_start=date(2024, 2, 29))
     assert config_end_of_month.sim_start == date(2024, 2, 1)
-

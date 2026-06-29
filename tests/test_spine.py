@@ -1,11 +1,8 @@
 """Tests for the spine generator module (generator/spine.py)."""
 
-from datetime import date
 import polars as pl
-import pytest
 from config.constants import CUSTOMER_ID_START, LOW_SENSITIVITY_SHARE_RANGE
 from config.events import UNCONDITIONAL_EVENTS, HiddenEvent
-from config.personas import Persona
 from config.simulation import SimulationConfig
 from generator.spine import generate_spine
 
@@ -61,7 +58,11 @@ def test_persona_distribution_and_low_sensitivity():
     # Verify low_sensitivity_segment share falls within the expected range
     low_sens_count = state["low_sensitivity_segment"].sum()
     low_sens_share = low_sens_count / len(state)
-    assert LOW_SENSITIVITY_SHARE_RANGE[0] <= low_sens_share <= LOW_SENSITIVITY_SHARE_RANGE[1]
+    assert (
+        LOW_SENSITIVITY_SHARE_RANGE[0]
+        <= low_sens_share
+        <= LOW_SENSITIVITY_SHARE_RANGE[1]
+    )
 
 
 def test_scheduled_events_structure_and_types():

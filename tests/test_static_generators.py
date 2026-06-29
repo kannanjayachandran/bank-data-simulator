@@ -1,11 +1,8 @@
 """Unit tests for the static entity generators in Phase 3."""
 
-from datetime import date
 import numpy as np
 import polars as pl
-import pytest
 
-from config.constants import CUSTOMER_ID_START
 from config.personas import Persona
 from config.simulation import SimulationConfig
 from generator.accounts import generate_accounts
@@ -20,7 +17,7 @@ from generator.spine import generate_spine
 def test_branches_master():
     """Verify that the branches DataFrame is correctly pre-populated and structured."""
     branches_df = generate_branches()
-    assert len(branches_df) == 10
+    assert len(branches_df) == 21
     assert branches_df.columns == [
         "branch_code",
         "branch_name",
@@ -30,6 +27,7 @@ def test_branches_master():
         "branch_type",
         "open_date",
         "closure_date",
+        "customer_weight",
     ]
     # Check uniqueness of branch codes
     assert branches_df["branch_code"].is_unique().all()
@@ -56,10 +54,14 @@ def test_static_pipeline_and_foreign_keys():
     assert len(accounts_df) >= 200  # at least one savings account per customer
 
     # 5. Generate Cards
-    cards_df = generate_cards(spine, customers_df, products_df, accounts_df, config, rng)
+    cards_df = generate_cards(
+        spine, customers_df, products_df, accounts_df, config, rng
+    )
 
     # 6. Generate Loans
-    loans_df, products_df = generate_loans(spine, customers_df, products_df, config, rng)
+    loans_df, products_df = generate_loans(
+        spine, customers_df, products_df, config, rng
+    )
 
     branches_df = generate_branches()
 
@@ -123,7 +125,8 @@ def test_product_uptake_statistical_expectations():
     assert dw_count > 100  # should be around 166
 
     dw_fd_count = products_df.filter(
-        (pl.col("customer_id").is_in(dormant_wealthy_ids)) & (pl.col("fixed_deposit_flag") == True)
+        (pl.col("customer_id").is_in(dormant_wealthy_ids))
+        & pl.col("fixed_deposit_flag")
     ).height
 
     fd_ratio = dw_fd_count / dw_count
