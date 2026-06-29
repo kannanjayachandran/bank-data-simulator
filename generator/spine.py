@@ -24,7 +24,9 @@ class Spine:
     scheduled_events: pl.DataFrame
 
 
-def generate_spine(config: SimulationConfig, customer_id_start: int = CUSTOMER_ID_START) -> Spine:
+def generate_spine(
+    config: SimulationConfig, customer_id_start: int = CUSTOMER_ID_START
+) -> Spine:
     """Generates the customer spine and schedules unconditional events.
 
     Args:
@@ -73,9 +75,7 @@ def generate_spine(config: SimulationConfig, customer_id_start: int = CUSTOMER_I
 
     for p in personas:
         # Get indices of customers belonging to this persona
-        indices = [
-            i for i, val in enumerate(customer_personas) if val == p.value
-        ]
+        indices = [i for i, val in enumerate(customer_personas) if val == p.value]
         if not indices:
             continue
         p_cust_ids = customer_ids[indices]
