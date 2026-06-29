@@ -36,16 +36,17 @@ from generator.loans import generate_loans, compute_max_principal
 from generator.spine import generate_spine
 from generator.transactions import (
     generate_salary_credit,
-    generate_non_salary_income,
-    generate_regular_transactions,
     generate_fee_or_charge,
     generate_monthly_regular_transactions,
     generate_monthly_non_salary_income,
 )
 from generator.activity import generate_monthly_activity
 from generator.digital import generate_monthly_digital
-from generator.churn import calculate_churn, ChurnInput, ChurnResult
-from generator.complaints import generate_complaints_for_month, resolve_complaints_for_month
+from generator.churn import calculate_churn, ChurnInput
+from generator.complaints import (
+    generate_complaints_for_month,
+    resolve_complaints_for_month,
+)
 from generator.feedback import generate_feedback_for_month
 from generator.labels import generate_churn_labels, generate_feature_snapshots
 
@@ -119,15 +120,20 @@ def run_simulation(
     spine = generate_spine(config, customer_id_start)
     initial_products = generate_initial_products(spine, config, rng)
     customer_df = generate_customers(spine, config, rng)
-    accounts_df = generate_accounts(spine, customer_df, initial_products, config, rng, account_id_start)
-    cards_df = generate_cards(spine, customer_df, initial_products, accounts_df, config, rng, card_id_start)
-    loans_df, initial_products = generate_loans(spine, customer_df, initial_products, config, rng, loan_id_start)
+    accounts_df = generate_accounts(
+        spine, customer_df, initial_products, config, rng, account_id_start
+    )
+    cards_df = generate_cards(
+        spine, customer_df, initial_products, accounts_df, config, rng, card_id_start
+    )
+    loans_df, initial_products = generate_loans(
+        spine, customer_df, initial_products, config, rng, loan_id_start
+    )
 
     # 2. Convert DataFrames to dicts/lists for runtime modifications
     customers = customer_df.to_dicts()
     customer_personas = {
-        row["customer_id"]: row["persona"]
-        for row in spine.simulation_state.to_dicts()
+        row["customer_id"]: row["persona"] for row in spine.simulation_state.to_dicts()
     }
     for c in customers:
         c["persona"] = customer_personas[c["customer_id"]]
@@ -150,7 +156,7 @@ def run_simulation(
         loans_by_customer.setdefault(ln["customer_id"], []).append(ln)
 
     complaints_by_customer = {}
-    
+
     # Track product holdings dynamically
     # customer_id -> dict of product flag names to bool
     product_holdings = {
@@ -173,7 +179,7 @@ def run_simulation(
     running_balances = {}  # account_id -> float
     for acc in accounts:
         cid = acc["customer_id"]
-        c_p = spine_state_persona = customer_personas[cid]
+        c_p = customer_personas[cid]
         # Initialize running balance based on persona
         if c_p == Persona.AFFLUENT_MULTI_PRODUCT.value:
             bal = rng.uniform(500000.0, 1500000.0)
@@ -189,13 +195,17 @@ def run_simulation(
             bal = rng.uniform(10000.0, 50000.0)
         running_balances[acc["account_id"]] = float(round(bal, 2))
 
-    running_card_spends = {c["card_id"]: 0.0 for c in cards if c["card_type"] == "Credit"}
+    running_card_spends = {
+        c["card_id"]: 0.0 for c in cards if c["card_type"] == "Credit"
+    }
 
     # Initialize loan states
     running_loans = {}  # loan_id -> outstanding_balance, dpd_days, status
     for ln in loans:
         disb = ln["disbursement_date"]
-        months_diff = (config.sim_start.year - disb.year) * 12 + (config.sim_start.month - disb.month)
+        months_diff = (config.sim_start.year - disb.year) * 12 + (
+            config.sim_start.month - disb.month
+        )
         outstanding = ln["sanctioned_amount"]
         r = ln["interest_rate"] / 12.0 / 100.0
         emi = ln["emi_amount"]
@@ -203,7 +213,7 @@ def run_simulation(
             interest = outstanding * r
             principal = emi - interest
             outstanding = max(0.0, outstanding - principal)
-        
+
         running_loans[ln["loan_id"]] = {
             "outstanding_balance": outstanding,
             "dpd_days": 0,
@@ -216,7 +226,10 @@ def run_simulation(
     digital_inactive_months = {c["customer_id"]: 0 for c in customers}
     recent_service_failures = {c["customer_id"]: False for c in customers}
     products_count_drop = {c["customer_id"]: False for c in customers}
-    previous_products_count = {c["customer_id"]: sum(product_holdings[c["customer_id"]].values()) for c in customers}
+    previous_products_count = {
+        c["customer_id"]: sum(product_holdings[c["customer_id"]].values())
+        for c in customers
+    }
 
     # Dynamic ID offsets
     next_txn_id = txn_id_start
@@ -255,7 +268,9 @@ def run_simulation(
     for evt in spine.scheduled_events.to_dicts():
         cid = evt["customer_id"]
         m_date = evt["event_month"]
-        pre_scheduled_events_cache.setdefault(cid, {}).setdefault(m_date, []).append(evt["event_type"])
+        pre_scheduled_events_cache.setdefault(cid, {}).setdefault(m_date, []).append(
+            evt["event_type"]
+        )
 
     # Track dynamically fired events
     dynamic_events_fired = []
@@ -263,12 +278,10 @@ def run_simulation(
     # Monthly Loop
     for month_idx in range(config.sim_months):
         snapshot_month = add_months(config.sim_start, month_idx)
-        days_in_month = get_days_in_month(snapshot_month)
 
         # 1. Filter out already churned customers
         active_customers = [
-            c for c in customers
-            if not spine_state[c["customer_id"]]["churned_flag"]
+            c for c in customers if not spine_state[c["customer_id"]]["churned_flag"]
         ]
         active_cids = {c["customer_id"] for c in active_customers}
 
@@ -288,29 +301,43 @@ def run_simulation(
                 customer_events[cid].add(evt_name)
 
             # Evaluate Conditional Events (O(1) lookup on cards and loans)
-            cust_cards = [card for card in cards_by_customer.get(cid, []) if card["card_status"] == "Active"]
+            cust_cards = [
+                card
+                for card in cards_by_customer.get(cid, [])
+                if card["card_status"] == "Active"
+            ]
             if cust_cards:
-                prob = CONDITIONAL_EVENT_BASELINES[persona][HiddenEvent.CARD_DECLINE_SPIKE]
+                prob = CONDITIONAL_EVENT_BASELINES[persona][
+                    HiddenEvent.CARD_DECLINE_SPIKE
+                ]
                 if rng.random() < prob:
                     customer_events[cid].add(HiddenEvent.CARD_DECLINE_SPIKE.value)
-                    dynamic_events_fired.append({
-                        "customer_id": cid,
-                        "event_month": snapshot_month,
-                        "event_type": HiddenEvent.CARD_DECLINE_SPIKE.value,
-                        "is_fired": True
-                    })
+                    dynamic_events_fired.append(
+                        {
+                            "customer_id": cid,
+                            "event_month": snapshot_month,
+                            "event_type": HiddenEvent.CARD_DECLINE_SPIKE.value,
+                            "is_fired": True,
+                        }
+                    )
 
-            digitally_active = (persona == Persona.DIGITAL_NATIVE) or (rng.random() < 0.6)
+            digitally_active = (persona == Persona.DIGITAL_NATIVE) or (
+                rng.random() < 0.6
+            )
             if digitally_active:
-                prob = CONDITIONAL_EVENT_BASELINES[persona][HiddenEvent.CAMPAIGN_EXPOSURE]
+                prob = CONDITIONAL_EVENT_BASELINES[persona][
+                    HiddenEvent.CAMPAIGN_EXPOSURE
+                ]
                 if rng.random() < prob:
                     customer_events[cid].add(HiddenEvent.CAMPAIGN_EXPOSURE.value)
-                    dynamic_events_fired.append({
-                        "customer_id": cid,
-                        "event_month": snapshot_month,
-                        "event_type": HiddenEvent.CAMPAIGN_EXPOSURE.value,
-                        "is_fired": True
-                    })
+                    dynamic_events_fired.append(
+                        {
+                            "customer_id": cid,
+                            "event_month": snapshot_month,
+                            "event_type": HiddenEvent.CAMPAIGN_EXPOSURE.value,
+                            "is_fired": True,
+                        }
+                    )
 
                     # Evaluate campaign success -> product adoption
                     success_rates = {
@@ -324,7 +351,8 @@ def run_simulation(
                     if rng.random() < success_rates[persona]:
                         holdings = product_holdings[cid]
                         eligible_products = [
-                            k for k, v in holdings.items()
+                            k
+                            for k, v in holdings.items()
                             if not v and k != "savings_account_flag"
                         ]
                         if eligible_products:
@@ -333,7 +361,11 @@ def run_simulation(
 
                             # Append and Index new entities dynamically
                             if new_prod == "current_account_flag":
-                                branch_code = next(b["branch_code"] for b in branches_df.to_dicts() if b["city"] == c["city"])
+                                branch_code = next(
+                                    b["branch_code"]
+                                    for b in branches_df.to_dicts()
+                                    if b["city"] == c["city"]
+                                )
                                 new_acc = {
                                     "account_id": next_account_id,
                                     "customer_id": cid,
@@ -343,23 +375,38 @@ def run_simulation(
                                     "account_status": "Active",
                                     "account_currency": "INR",
                                     "salary_account_flag": False,
-                                    "overdraft_limit": float(rng.choice([25000.0, 50000.0])),
+                                    "overdraft_limit": float(
+                                        rng.choice([25000.0, 50000.0])
+                                    ),
                                     "account_close_date": None,
                                 }
                                 accounts.append(new_acc)
                                 accounts_by_customer.setdefault(cid, []).append(new_acc)
-                                running_balances[next_account_id] = float(rng.uniform(10000.0, 30000.0))
+                                running_balances[next_account_id] = float(
+                                    rng.uniform(10000.0, 30000.0)
+                                )
                                 next_account_id += 1
 
                             elif new_prod == "credit_card_flag":
-                                limit = float(max(10000.0, round((c["annual_income"] / 12.0) * CREDIT_LIMIT_MULTIPLIER, -3)))
+                                limit = float(
+                                    max(
+                                        10000.0,
+                                        round(
+                                            (c["annual_income"] / 12.0)
+                                            * CREDIT_LIMIT_MULTIPLIER,
+                                            -3,
+                                        ),
+                                    )
+                                )
                                 new_card = {
                                     "card_id": next_card_id,
                                     "customer_id": cid,
                                     "card_type": "Credit",
                                     "network": rng.choice(["Visa", "Mastercard"]),
                                     "issue_date": snapshot_month,
-                                    "expiry_date": snapshot_month.replace(year=snapshot_month.year + 5),
+                                    "expiry_date": snapshot_month.replace(
+                                        year=snapshot_month.year + 5
+                                    ),
                                     "card_status": "Active",
                                     "primary_card_flag": True,
                                     "credit_limit": limit,
@@ -372,30 +419,46 @@ def run_simulation(
                                 next_card_id += 1
 
                             elif new_prod in ["personal_loan_flag", "home_loan_flag"]:
-                                l_type = "Personal Loan" if new_prod == "personal_loan_flag" else "Home Loan"
-                                sanctioned = 100000.0 if l_type == "Personal Loan" else 2000000.0
+                                l_type = (
+                                    "Personal Loan"
+                                    if new_prod == "personal_loan_flag"
+                                    else "Home Loan"
+                                )
+                                sanctioned = (
+                                    100000.0 if l_type == "Personal Loan" else 2000000.0
+                                )
                                 rate = 12.5 if l_type == "Personal Loan" else 8.5
                                 tenure = 36 if l_type == "Personal Loan" else 180
-                                
+
                                 # Apply FOIR check mid-simulation too!
                                 monthly_income = c["annual_income"] / 12.0
                                 limit_pct = FOIR_LIMITS[l_type]
                                 max_emi = monthly_income * limit_pct
-                                min_amt = MIN_PERSONAL_LOAN_AMOUNT if l_type == "Personal Loan" else MIN_HOME_LOAN_AMOUNT
-                                foir_max_p = compute_max_principal(max_emi, rate, tenure)
-                                
+                                min_amt = (
+                                    MIN_PERSONAL_LOAN_AMOUNT
+                                    if l_type == "Personal Loan"
+                                    else MIN_HOME_LOAN_AMOUNT
+                                )
+                                foir_max_p = compute_max_principal(
+                                    max_emi, rate, tenure
+                                )
+
                                 if foir_max_p < min_amt:
                                     # Customer cannot afford this loan, revert product acquisition
                                     holdings[new_prod] = False
                                     continue
-                                
+
                                 R = rate / 12.0 / 100.0
                                 N = tenure
                                 P = sanctioned
                                 emi = P * R * ((1 + R) ** N) / (((1 + R) ** N) - 1)
                                 emi_amount = float(round(emi, 2))
 
-                                branch_code = next(b["branch_code"] for b in branches_df.to_dicts() if b["city"] == c["city"])
+                                branch_code = next(
+                                    b["branch_code"]
+                                    for b in branches_df.to_dicts()
+                                    if b["city"] == c["city"]
+                                )
                                 new_loan = {
                                     "loan_id": next_loan_id,
                                     "customer_id": cid,
@@ -409,7 +472,8 @@ def run_simulation(
                                     "loan_purpose": "General",
                                     "origination_channel": "Online",
                                     "loan_status": "Active",
-                                    "maturity_date": snapshot_month + timedelta(days=tenure * 30),
+                                    "maturity_date": snapshot_month
+                                    + timedelta(days=tenure * 30),
                                 }
                                 loans.append(new_loan)
                                 loans_by_customer.setdefault(cid, []).append(new_loan)
@@ -420,29 +484,45 @@ def run_simulation(
                                 }
                                 next_loan_id += 1
 
-            cust_loans = [l for l in loans_by_customer.get(cid, []) if running_loans[l["loan_id"]]["status"] == "Active"]
+            cust_loans = [
+                loan
+                for loan in loans_by_customer.get(cid, [])
+                if running_loans[loan["loan_id"]]["status"] == "Active"
+            ]
             if cust_loans:
-                prob = CONDITIONAL_EVENT_BASELINES[persona][HiddenEvent.LOAN_DELINQUENCY_START]
+                prob = CONDITIONAL_EVENT_BASELINES[persona][
+                    HiddenEvent.LOAN_DELINQUENCY_START
+                ]
                 if rng.random() < prob:
                     customer_events[cid].add(HiddenEvent.LOAN_DELINQUENCY_START.value)
-                    dynamic_events_fired.append({
-                        "customer_id": cid,
-                        "event_month": snapshot_month,
-                        "event_type": HiddenEvent.LOAN_DELINQUENCY_START.value,
-                        "is_fired": True
-                    })
+                    dynamic_events_fired.append(
+                        {
+                            "customer_id": cid,
+                            "event_month": snapshot_month,
+                            "event_type": HiddenEvent.LOAN_DELINQUENCY_START.value,
+                            "is_fired": True,
+                        }
+                    )
 
-            cust_open_comps = [comp for comp in complaints_by_customer.get(cid, []) if comp["status"] == "Open"]
+            cust_open_comps = [
+                comp
+                for comp in complaints_by_customer.get(cid, [])
+                if comp["status"] == "Open"
+            ]
             if cust_open_comps:
-                prob = CONDITIONAL_EVENT_BASELINES[persona][HiddenEvent.COMPLAINT_RESOLVED]
+                prob = CONDITIONAL_EVENT_BASELINES[persona][
+                    HiddenEvent.COMPLAINT_RESOLVED
+                ]
                 if rng.random() < prob:
                     customer_events[cid].add(HiddenEvent.COMPLAINT_RESOLVED.value)
-                    dynamic_events_fired.append({
-                        "customer_id": cid,
-                        "event_month": snapshot_month,
-                        "event_type": HiddenEvent.COMPLAINT_RESOLVED.value,
-                        "is_fired": True
-                    })
+                    dynamic_events_fired.append(
+                        {
+                            "customer_id": cid,
+                            "event_month": snapshot_month,
+                            "event_type": HiddenEvent.COMPLAINT_RESOLVED.value,
+                            "is_fired": True,
+                        }
+                    )
 
         # Step 3: Generate Monthly Transactions & Snapshot Metrics Customer-by-Customer
         monthly_txns = []
@@ -455,7 +535,11 @@ def run_simulation(
         primary_accs = {}
         for c in active_customers:
             cid = c["customer_id"]
-            c_accs = [a for a in accounts_by_customer.get(cid, []) if a["account_status"] == "Active"]
+            c_accs = [
+                a
+                for a in accounts_by_customer.get(cid, [])
+                if a["account_status"] == "Active"
+            ]
             primary_acc = None
             for acc in c_accs:
                 if acc["account_type"] == PRIMARY_ACCOUNT_TYPE:
@@ -463,7 +547,7 @@ def run_simulation(
                     break
             if primary_acc is None and c_accs:
                 primary_acc = c_accs[0]
-            
+
             if primary_acc:
                 primary_accs[cid] = primary_acc
                 if not primary_acc["salary_account_flag"]:
@@ -485,6 +569,7 @@ def run_simulation(
 
         # Group pre-generated transactions by customer_id
         from collections import defaultdict
+
         pregen_credits_by_cust = defaultdict(list)
         for t in pregen_credits:
             pregen_credits_by_cust[t["customer_id"]].append(t)
@@ -497,7 +582,11 @@ def run_simulation(
             cid = c["customer_id"]
             persona = Persona(c["persona"])
             events = customer_events[cid]
-            c_accs = [a for a in accounts_by_customer.get(cid, []) if a["account_status"] == "Active"]
+            c_accs = [
+                a
+                for a in accounts_by_customer.get(cid, [])
+                if a["account_status"] == "Active"
+            ]
 
             txn_cnt = 0
             cred_cnt = 0
@@ -530,14 +619,30 @@ def run_simulation(
                     else:
                         salary_amt = (c["annual_income"] / 12.0) * rng.uniform(0.9, 1.2)
                         cust_txns.append(
-                            generate_salary_credit(next_txn_id, cid, acc_id, salary_amt, date(snapshot_month.year, snapshot_month.month, 1), c["city"], c["state"])
+                            generate_salary_credit(
+                                next_txn_id,
+                                cid,
+                                acc_id,
+                                salary_amt,
+                                date(snapshot_month.year, snapshot_month.month, 1),
+                                c["city"],
+                                c["state"],
+                            )
                         )
                         next_txn_id += 1
                         months_without_salary[cid] = 0
                 else:
                     salary_amt = c["annual_income"] / 12.0
                     cust_txns.append(
-                        generate_salary_credit(next_txn_id, cid, acc_id, salary_amt, date(snapshot_month.year, snapshot_month.month, 1), c["city"], c["state"])
+                        generate_salary_credit(
+                            next_txn_id,
+                            cid,
+                            acc_id,
+                            salary_amt,
+                            date(snapshot_month.year, snapshot_month.month, 1),
+                            c["city"],
+                            c["state"],
+                        )
                     )
                     next_txn_id += 1
                     months_without_salary[cid] = 0
@@ -545,7 +650,11 @@ def run_simulation(
                 cust_txns.extend(pregen_credits_by_cust.get(cid, []))
 
             # 3.2 Regular Transactions
-            cc = [card for card in cards_by_customer.get(cid, []) if card["card_type"] == "Credit" and card["card_status"] == "Active"]
+            cc = [
+                card
+                for card in cards_by_customer.get(cid, [])
+                if card["card_type"] == "Credit" and card["card_status"] == "Active"
+            ]
             for t in pregen_debits_by_cust.get(cid, []):
                 t["account_id"] = acc_id
                 if cc and rng.random() < 0.40:
@@ -564,43 +673,57 @@ def run_simulation(
                     emi = ln["emi_amount"]
                     interest_rate = ln["interest_rate"]
                     outstanding = ln_state["outstanding_balance"]
-                    
+
                     interest = outstanding * (interest_rate / 12.0 / 100.0)
                     principal = emi - interest
                     principal = min(principal, outstanding)
                     actual_emi = principal + interest
 
-                    current_temp_bal = start_bal + sum(t["amount"] if t["direction"] == "Credit" else -t["amount"] for t in cust_txns)
+                    current_temp_bal = start_bal + sum(
+                        t["amount"] if t["direction"] == "Credit" else -t["amount"]
+                        for t in cust_txns
+                    )
                     overdraft = primary_acc["overdraft_limit"]
-                    
-                    is_delinquent_now = "loan_delinquency_start" in events or (current_temp_bal + overdraft < actual_emi)
+
+                    is_delinquent_now = "loan_delinquency_start" in events or (
+                        current_temp_bal + overdraft < actual_emi
+                    )
 
                     if not is_delinquent_now:
-                        cust_txns.append({
-                            "transaction_id": next_txn_id,
-                            "account_id": acc_id,
-                            "customer_id": cid,
-                            "txn_timestamp": datetime.combine(date(snapshot_month.year, snapshot_month.month, 10), time(10, 0, 0)),
-                            "txn_date": date(snapshot_month.year, snapshot_month.month, 10),
-                            "txn_month": snapshot_month,
-                            "txn_type": "Loan EMI Payment",
-                            "direction": "Debit",
-                            "channel": "System",
-                            "amount": round(actual_emi, 2),
-                            "currency": "INR",
-                            "merchant_category": "Financial Services",
-                            "merchant_name": "Bank Loan Dept",
-                            "counterparty_type": "Bank",
-                            "city": c["city"],
-                            "state": c["state"],
-                            "is_salary_credit": False,
-                            "is_fee": False,
-                            "is_reversal": False,
-                            "balance_after_txn": 0.0,
-                        })
+                        cust_txns.append(
+                            {
+                                "transaction_id": next_txn_id,
+                                "account_id": acc_id,
+                                "customer_id": cid,
+                                "txn_timestamp": datetime.combine(
+                                    date(snapshot_month.year, snapshot_month.month, 10),
+                                    time(10, 0, 0),
+                                ),
+                                "txn_date": date(
+                                    snapshot_month.year, snapshot_month.month, 10
+                                ),
+                                "txn_month": snapshot_month,
+                                "txn_type": "Loan EMI Payment",
+                                "direction": "Debit",
+                                "channel": "System",
+                                "amount": round(actual_emi, 2),
+                                "currency": "INR",
+                                "merchant_category": "Financial Services",
+                                "merchant_name": "Bank Loan Dept",
+                                "counterparty_type": "Bank",
+                                "city": c["city"],
+                                "state": c["state"],
+                                "is_salary_credit": False,
+                                "is_fee": False,
+                                "is_reversal": False,
+                                "balance_after_txn": 0.0,
+                            }
+                        )
                         next_txn_id += 1
-                        
-                        ln_state["outstanding_balance"] = max(0.0, outstanding - principal)
+
+                        ln_state["outstanding_balance"] = max(
+                            0.0, outstanding - principal
+                        )
                         ln_state["dpd_days"] = 0
                         if ln_state["outstanding_balance"] <= 0.0:
                             ln_state["status"] = "Closed"
@@ -611,53 +734,39 @@ def run_simulation(
                             ln_state["status"] = "Delinquent"
 
             # 3.4 Credit Card Payment (Day 25)
-            cust_cc = [card for card in cards_by_customer.get(cid, []) if card["card_type"] == "Credit"]
+            cust_cc = [
+                card
+                for card in cards_by_customer.get(cid, [])
+                if card["card_type"] == "Credit"
+            ]
             for cc in cust_cc:
                 card_id = cc["card_id"]
                 spend = running_card_spends[card_id]
                 if spend > 0:
-                    current_temp_bal = start_bal + sum(t["amount"] if t["direction"] == "Credit" else -t["amount"] for t in cust_txns)
+                    current_temp_bal = start_bal + sum(
+                        t["amount"] if t["direction"] == "Credit" else -t["amount"]
+                        for t in cust_txns
+                    )
                     overdraft = primary_acc["overdraft_limit"]
-                    
+
                     if current_temp_bal + overdraft >= spend:
-                        cust_txns.append({
-                            "transaction_id": next_txn_id,
-                            "account_id": acc_id,
-                            "customer_id": cid,
-                            "txn_timestamp": datetime.combine(date(snapshot_month.year, snapshot_month.month, 25), time(18, 0, 0)),
-                            "txn_date": date(snapshot_month.year, snapshot_month.month, 25),
-                            "txn_month": snapshot_month,
-                            "txn_type": "Credit Card Payment",
-                            "direction": "Debit",
-                            "channel": "System",
-                            "amount": round(spend, 2),
-                            "currency": "INR",
-                            "merchant_category": "Credit Card",
-                            "merchant_name": "Bank Card Division",
-                            "counterparty_type": "Bank",
-                            "city": c["city"],
-                            "state": c["state"],
-                            "is_salary_credit": False,
-                            "is_fee": False,
-                            "is_reversal": False,
-                            "balance_after_txn": 0.0,
-                        })
-                        next_txn_id += 1
-                        running_card_spends[card_id] = 0.0
-                    else:
-                        min_due = spend * 0.05
-                        if current_temp_bal + overdraft >= min_due:
-                            cust_txns.append({
+                        cust_txns.append(
+                            {
                                 "transaction_id": next_txn_id,
                                 "account_id": acc_id,
                                 "customer_id": cid,
-                                "txn_timestamp": datetime.combine(date(snapshot_month.year, snapshot_month.month, 25), time(18, 0, 0)),
-                                "txn_date": date(snapshot_month.year, snapshot_month.month, 25),
+                                "txn_timestamp": datetime.combine(
+                                    date(snapshot_month.year, snapshot_month.month, 25),
+                                    time(18, 0, 0),
+                                ),
+                                "txn_date": date(
+                                    snapshot_month.year, snapshot_month.month, 25
+                                ),
                                 "txn_month": snapshot_month,
                                 "txn_type": "Credit Card Payment",
                                 "direction": "Debit",
                                 "channel": "System",
-                                "amount": round(min_due, 2),
+                                "amount": round(spend, 2),
                                 "currency": "INR",
                                 "merchant_category": "Credit Card",
                                 "merchant_name": "Bank Card Division",
@@ -668,7 +777,46 @@ def run_simulation(
                                 "is_fee": False,
                                 "is_reversal": False,
                                 "balance_after_txn": 0.0,
-                            })
+                            }
+                        )
+                        next_txn_id += 1
+                        running_card_spends[card_id] = 0.0
+                    else:
+                        min_due = spend * 0.05
+                        if current_temp_bal + overdraft >= min_due:
+                            cust_txns.append(
+                                {
+                                    "transaction_id": next_txn_id,
+                                    "account_id": acc_id,
+                                    "customer_id": cid,
+                                    "txn_timestamp": datetime.combine(
+                                        date(
+                                            snapshot_month.year,
+                                            snapshot_month.month,
+                                            25,
+                                        ),
+                                        time(18, 0, 0),
+                                    ),
+                                    "txn_date": date(
+                                        snapshot_month.year, snapshot_month.month, 25
+                                    ),
+                                    "txn_month": snapshot_month,
+                                    "txn_type": "Credit Card Payment",
+                                    "direction": "Debit",
+                                    "channel": "System",
+                                    "amount": round(min_due, 2),
+                                    "currency": "INR",
+                                    "merchant_category": "Credit Card",
+                                    "merchant_name": "Bank Card Division",
+                                    "counterparty_type": "Bank",
+                                    "city": c["city"],
+                                    "state": c["state"],
+                                    "is_salary_credit": False,
+                                    "is_fee": False,
+                                    "is_reversal": False,
+                                    "balance_after_txn": 0.0,
+                                }
+                            )
                             next_txn_id += 1
                             running_card_spends[card_id] = (spend - min_due) * 1.02
                         else:
@@ -677,17 +825,29 @@ def run_simulation(
             # 3.5 System Fees (Day 28)
             is_fee_hike = "fee_hike_or_service_charge" in events
             if is_fee_hike or rng.random() < 0.10:
-                fee_amt = rng.uniform(100.0, 500.0) if is_fee_hike else rng.uniform(50.0, 150.0)
+                fee_amt = (
+                    rng.uniform(100.0, 500.0)
+                    if is_fee_hike
+                    else rng.uniform(50.0, 150.0)
+                )
                 cust_txns.append(
-                    generate_fee_or_charge(next_txn_id, cid, acc_id, date(snapshot_month.year, snapshot_month.month, 28), fee_amt, c["city"], c["state"])
+                    generate_fee_or_charge(
+                        next_txn_id,
+                        cid,
+                        acc_id,
+                        date(snapshot_month.year, snapshot_month.month, 28),
+                        fee_amt,
+                        c["city"],
+                        c["state"],
+                    )
                 )
                 next_txn_id += 1
 
             cust_txns.sort(key=lambda t: t["txn_timestamp"])
-            
+
             running_bal = start_bal
             txn_balances = []
-            
+
             for t in cust_txns:
                 if t["direction"] == "Credit":
                     running_bal += t["amount"]
@@ -695,7 +855,7 @@ def run_simulation(
                     running_bal -= t["amount"]
                 t["balance_after_txn"] = round(running_bal, 2)
                 txn_balances.append(running_bal)
-                
+
                 txn_cnt += 1
                 if t["direction"] == "Credit":
                     cred_cnt += 1
@@ -731,21 +891,32 @@ def run_simulation(
             min_bal = np.min(txn_balances) if txn_balances else current_bal
             max_bal = np.max(txn_balances) if txn_balances else current_bal
 
-            account_snapshots.append({
-                "account_id": acc_id,
-                "snapshot_month": snapshot_month,
-                "current_balance": current_bal,
-                "average_monthly_balance": float(round(avg_bal, 2)),
-                "min_balance_30d": float(round(min_bal, 2)),
-                "max_balance_30d": float(round(max_bal, 2)),
-                "deposit_count": cred_cnt,
-                "withdrawal_count": debit_cnt,
-                "debit_txn_count": debit_cnt,
-                "credit_txn_count": cred_cnt,
-                "fee_charged_amount": float(round(sum(t["amount"] for t in cust_txns if t["is_fee"]), 2)),
-                "salary_credit_amount": float(round(sum(t["amount"] for t in cust_txns if t["is_salary_credit"]), 2)),
-                "account_status": primary_acc["account_status"],
-            })
+            account_snapshots.append(
+                {
+                    "account_id": acc_id,
+                    "snapshot_month": snapshot_month,
+                    "current_balance": current_bal,
+                    "average_monthly_balance": float(round(avg_bal, 2)),
+                    "min_balance_30d": float(round(min_bal, 2)),
+                    "max_balance_30d": float(round(max_bal, 2)),
+                    "deposit_count": cred_cnt,
+                    "withdrawal_count": debit_cnt,
+                    "debit_txn_count": debit_cnt,
+                    "credit_txn_count": cred_cnt,
+                    "fee_charged_amount": float(
+                        round(sum(t["amount"] for t in cust_txns if t["is_fee"]), 2)
+                    ),
+                    "salary_credit_amount": float(
+                        round(
+                            sum(
+                                t["amount"] for t in cust_txns if t["is_salary_credit"]
+                            ),
+                            2,
+                        )
+                    ),
+                    "account_status": primary_acc["account_status"],
+                }
+            )
 
             cust_cc = cards_by_customer.get(cid, [])
             for cc in cust_cc:
@@ -753,78 +924,100 @@ def run_simulation(
                     spend = running_card_spends[cc["card_id"]]
                     limit = cc["credit_limit"]
                     util = spend / limit if limit > 0 else 0.0
-                    card_snapshots.append({
-                        "card_id": cc["card_id"],
-                        "snapshot_month": snapshot_month,
-                        "monthly_spend_amount": float(round(spend, 2)),
-                        "monthly_txn_count": int(rng.poisson(4.0)) if spend > 0 else 0,
-                        "cash_advance_amount": 0.0,
-                        "utilization_rate": float(round(util, 4)),
-                        "min_due_amount": float(round(spend * 0.05, 2)),
-                        "payment_made_amount": float(round(spend, 2)) if spend > 0 else 0.0,
-                        "rewards_points_balance": int(rng.integers(100, 1000)) if spend > 0 else 0,
-                        "card_status": cc["card_status"],
-                        "delinquency_flag": bool(spend > limit),
-                    })
+                    card_snapshots.append(
+                        {
+                            "card_id": cc["card_id"],
+                            "snapshot_month": snapshot_month,
+                            "monthly_spend_amount": float(round(spend, 2)),
+                            "monthly_txn_count": int(rng.poisson(4.0))
+                            if spend > 0
+                            else 0,
+                            "cash_advance_amount": 0.0,
+                            "utilization_rate": float(round(util, 4)),
+                            "min_due_amount": float(round(spend * 0.05, 2)),
+                            "payment_made_amount": float(round(spend, 2))
+                            if spend > 0
+                            else 0.0,
+                            "rewards_points_balance": int(rng.integers(100, 1000))
+                            if spend > 0
+                            else 0,
+                            "card_status": cc["card_status"],
+                            "delinquency_flag": bool(spend > limit),
+                        }
+                    )
                 else:
-                    card_snapshots.append({
-                        "card_id": cc["card_id"],
-                        "snapshot_month": snapshot_month,
-                        "monthly_spend_amount": float(round(total_deb * 0.3, 2)),
-                        "monthly_txn_count": int(debit_cnt),
-                        "cash_advance_amount": 0.0,
-                        "utilization_rate": 0.0,
-                        "min_due_amount": 0.0,
-                        "payment_made_amount": 0.0,
-                        "rewards_points_balance": 0,
-                        "card_status": cc["card_status"],
-                        "delinquency_flag": False,
-                    })
+                    card_snapshots.append(
+                        {
+                            "card_id": cc["card_id"],
+                            "snapshot_month": snapshot_month,
+                            "monthly_spend_amount": float(round(total_deb * 0.3, 2)),
+                            "monthly_txn_count": int(debit_cnt),
+                            "cash_advance_amount": 0.0,
+                            "utilization_rate": 0.0,
+                            "min_due_amount": 0.0,
+                            "payment_made_amount": 0.0,
+                            "rewards_points_balance": 0,
+                            "card_status": cc["card_status"],
+                            "delinquency_flag": False,
+                        }
+                    )
 
             for ln in cust_loans:
                 loan_id = ln["loan_id"]
                 ln_state = running_loans[loan_id]
                 outstanding = ln_state["outstanding_balance"]
-                
+
                 interest_rate = ln["interest_rate"]
                 emi = ln["emi_amount"]
                 interest = outstanding * (interest_rate / 12.0 / 100.0)
                 principal = emi - interest
                 principal = min(principal, outstanding)
-                
+
                 is_delinquent = ln_state["dpd_days"] > 0
 
-                loan_snapshots.append({
-                    "loan_id": loan_id,
-                    "snapshot_month": snapshot_month,
-                    "outstanding_balance": float(round(outstanding, 2)),
-                    "emi_amount": float(emi),
-                    "dpd_days": int(ln_state["dpd_days"]),
-                    "overdue_amount": float(round(emi if is_delinquent else 0.0, 2)),
-                    "principal_paid_amount": float(round(0.0 if is_delinquent else principal, 2)),
-                    "interest_paid_amount": float(round(0.0 if is_delinquent else interest, 2)),
-                    "installment_due_amount": float(emi),
-                    "installment_paid_amount": float(round(0.0 if is_delinquent else emi, 2)),
-                    "loan_status": ln_state["status"],
-                    "restructuring_flag": False,
-                })
+                loan_snapshots.append(
+                    {
+                        "loan_id": loan_id,
+                        "snapshot_month": snapshot_month,
+                        "outstanding_balance": float(round(outstanding, 2)),
+                        "emi_amount": float(emi),
+                        "dpd_days": int(ln_state["dpd_days"]),
+                        "overdue_amount": float(
+                            round(emi if is_delinquent else 0.0, 2)
+                        ),
+                        "principal_paid_amount": float(
+                            round(0.0 if is_delinquent else principal, 2)
+                        ),
+                        "interest_paid_amount": float(
+                            round(0.0 if is_delinquent else interest, 2)
+                        ),
+                        "installment_due_amount": float(emi),
+                        "installment_paid_amount": float(
+                            round(0.0 if is_delinquent else emi, 2)
+                        ),
+                        "loan_status": ln_state["status"],
+                        "restructuring_flag": False,
+                    }
+                )
 
             holdings = product_holdings[cid]
-            product_holdings_snapshots.append({
-                "customer_id": cid,
-                "snapshot_month": snapshot_month,
-                "savings_account_flag": holdings["savings_account_flag"],
-                "current_account_flag": holdings["current_account_flag"],
-                "credit_card_flag": holdings["credit_card_flag"],
-                "personal_loan_flag": holdings["personal_loan_flag"],
-                "home_loan_flag": holdings["home_loan_flag"],
-                "fixed_deposit_flag": holdings["fixed_deposit_flag"],
-                "insurance_flag": holdings["insurance_flag"],
-                "mutual_fund_flag": holdings["mutual_fund_flag"],
-                "demat_account_flag": holdings["demat_account_flag"],
-                "wealth_management_flag": holdings["wealth_management_flag"],
-                "products_count": int(sum(holdings.values())),
-            })
+            product_holdings_snapshots.append(
+                {
+                    "customer_id": cid,
+                    "snapshot_month": snapshot_month,
+                    "savings_account_flag": holdings["savings_account_flag"],
+                    "current_account_flag": holdings["current_account_flag"],
+                    "credit_card_flag": holdings["credit_card_flag"],
+                    "personal_loan_flag": holdings["personal_loan_flag"],
+                    "home_loan_flag": holdings["home_loan_flag"],
+                    "fixed_deposit_flag": holdings["fixed_deposit_flag"],
+                    "insurance_flag": holdings["insurance_flag"],
+                    "mutual_fund_flag": holdings["mutual_fund_flag"],
+                    "demat_account_flag": holdings["demat_account_flag"],
+                    "wealth_management_flag": holdings["wealth_management_flag"],
+                    "products_count": int(sum(holdings.values())),
+                }
+            )
 
             curr_prod_cnt = sum(holdings.values())
             products_count_drop[cid] = curr_prod_cnt < previous_products_count[cid]
@@ -848,7 +1041,7 @@ def run_simulation(
             active_personas_list,
             rng,
             month_aggregates,
-            {cid: list(customer_events[cid]) for cid in active_cids_list}
+            {cid: list(customer_events[cid]) for cid in active_cids_list},
         )
         activity_snapshots.append(monthly_activity_df)
 
@@ -868,7 +1061,7 @@ def run_simulation(
             rng,
             login_counts_dict,
             dsl_dict,
-            {cid: list(customer_events[cid]) for cid in active_cids_list}
+            {cid: list(customer_events[cid]) for cid in active_cids_list},
         )
         digital_snapshots.append(monthly_digital_df)
 
@@ -881,11 +1074,7 @@ def run_simulation(
 
         # Step 5: Complaints and Feedback
         new_comps = generate_complaints_for_month(
-            active_customers,
-            customer_events,
-            snapshot_month,
-            next_complaint_id,
-            rng
+            active_customers, customer_events, snapshot_month, next_complaint_id, rng
         )
         all_complaints.extend(new_comps)
         # Update dynamic complaints index
@@ -894,8 +1083,7 @@ def run_simulation(
         next_complaint_id += len(new_comps)
 
         resolved_cids = {
-            cid for cid, evts in customer_events.items()
-            if "complaint_resolved" in evts
+            cid for cid, evts in customer_events.items() if "complaint_resolved" in evts
         }
         resolve_complaints_for_month(all_complaints, resolved_cids, snapshot_month, rng)
 
@@ -915,7 +1103,7 @@ def run_simulation(
             customer_events,
             snapshot_month,
             next_feedback_id,
-            rng
+            rng,
         )
         all_feedback.extend(new_feed)
         next_feedback_id += len(new_feed)
@@ -925,7 +1113,10 @@ def run_simulation(
         comp_count_6m = {}
         for comp in all_complaints:
             cid = comp["customer_id"]
-            if comp["complaint_month"] >= m_minus_6 and comp["complaint_month"] <= snapshot_month:
+            if (
+                comp["complaint_month"] >= m_minus_6
+                and comp["complaint_month"] <= snapshot_month
+            ):
                 comp_count_6m[cid] = comp_count_6m.get(cid, 0) + 1
 
         for c in active_customers:
@@ -934,10 +1125,12 @@ def run_simulation(
 
             ln_dpd = 0
             ln_status = "Active"
-            cust_lns = [running_loans[l["loan_id"]] for l in loans_by_customer.get(cid, [])]
+            cust_lns = [
+                running_loans[loan["loan_id"]] for loan in loans_by_customer.get(cid, [])
+            ]
             if cust_lns:
-                ln_dpd = max(l["dpd_days"] for l in cust_lns)
-                if any(l["status"] == "Delinquent" for l in cust_lns):
+                ln_dpd = max(loan["dpd_days"] for loan in cust_lns)
+                if any(loan["status"] == "Delinquent" for loan in cust_lns):
                     ln_status = "Delinquent"
 
             open_comps = unresolved_counts.get(cid, 0)
@@ -950,7 +1143,9 @@ def run_simulation(
             failures_2m = service_failures_2m[cid]
 
             p_config = PERSONA_CONFIGS[persona]
-            base_prob = rng.uniform(p_config.base_monthly_churn_min, p_config.base_monthly_churn_max)
+            base_prob = rng.uniform(
+                p_config.base_monthly_churn_min, p_config.base_monthly_churn_max
+            )
             base_prob = np.clip(base_prob, 1e-5, 1 - 1e-5)
             base_rate = float(np.log(base_prob / (1 - base_prob)))
 
@@ -974,7 +1169,7 @@ def run_simulation(
                 core_account_closed=False,
                 recent_salary_job_change="salary_job_change" in customer_events[cid],
                 products_count_drop=products_count_drop[cid],
-                recent_service_failure=recent_service_failures[cid]
+                recent_service_failure=recent_service_failures[cid],
             )
 
             c_res = calculate_churn(c_input, rng, use_threshold=False)
@@ -989,13 +1184,18 @@ def run_simulation(
 
         if streaming and output_dir:
             from pipeline.writer import write_to_parquet
+
             m_acc_snap = pl.DataFrame(account_snapshots)
             m_card_snap = pl.DataFrame(card_snapshots)
             m_loan_snap = pl.DataFrame(loan_snapshots)
             m_holdings_snap = pl.DataFrame(product_holdings_snapshots)
             m_txns_snap = pl.DataFrame(all_transactions)
-            m_activity_snap = pl.concat(activity_snapshots) if activity_snapshots else pl.DataFrame()
-            m_digital_snap = pl.concat(digital_snapshots) if digital_snapshots else pl.DataFrame()
+            m_activity_snap = (
+                pl.concat(activity_snapshots) if activity_snapshots else pl.DataFrame()
+            )
+            m_digital_snap = (
+                pl.concat(digital_snapshots) if digital_snapshots else pl.DataFrame()
+            )
 
             temp_dfs = {
                 "account_monthly_snapshot": m_acc_snap,
@@ -1017,19 +1217,6 @@ def run_simulation(
             digital_snapshots = []
 
     # Final compilations
-    if dynamic_events_fired:
-        dynamic_events_df = pl.DataFrame(
-            dynamic_events_fired,
-            schema={
-                "customer_id": pl.Int64,
-                "event_month": pl.Date,
-                "event_type": pl.String,
-                "is_fired": pl.Boolean,
-            }
-        )
-        final_events_df = pl.concat([spine.scheduled_events, dynamic_events_df]).sort(["customer_id", "event_month"])
-    else:
-        final_events_df = spine.scheduled_events
 
     final_state_df = pl.DataFrame(
         [
@@ -1052,7 +1239,7 @@ def run_simulation(
             "churned_flag": pl.Boolean,
             "churn_reason": pl.String,
             "active_months_generated": pl.Int32,
-        }
+        },
     )
 
     complaints_df = pl.DataFrame(
@@ -1071,7 +1258,7 @@ def run_simulation(
             "csat_score": pl.Int32,
             "root_cause": pl.String,
             "status": pl.String,
-        }
+        },
     )
 
     feedback_df = pl.DataFrame(
@@ -1085,7 +1272,7 @@ def run_simulation(
             "survey_topic": pl.String,
             "nps_score": pl.Int32,
             "csat_score": pl.Int32,
-        }
+        },
     )
 
     customer_master_df = customer_df
@@ -1096,19 +1283,35 @@ def run_simulation(
     labels_df = generate_churn_labels(final_state_df, config)
 
     if streaming and output_dir:
-        account_snapshots_df = pl.read_parquet(os.path.join(output_dir, "account_monthly_snapshot"))
-        card_snapshots_df = pl.read_parquet(os.path.join(output_dir, "card_monthly_snapshot"))
-        loan_snapshots_df = pl.read_parquet(os.path.join(output_dir, "loan_monthly_snapshot"))
-        holdings_df = pl.read_parquet(os.path.join(output_dir, "product_holdings_monthly"))
-        activity_df = pl.read_parquet(os.path.join(output_dir, "customer_monthly_activity"))
-        digital_df = pl.read_parquet(os.path.join(output_dir, "digital_engagement_monthly"))
+        account_snapshots_df = pl.read_parquet(
+            os.path.join(output_dir, "account_monthly_snapshot")
+        )
+        card_snapshots_df = pl.read_parquet(
+            os.path.join(output_dir, "card_monthly_snapshot")
+        )
+        loan_snapshots_df = pl.read_parquet(
+            os.path.join(output_dir, "loan_monthly_snapshot")
+        )
+        holdings_df = pl.read_parquet(
+            os.path.join(output_dir, "product_holdings_monthly")
+        )
+        activity_df = pl.read_parquet(
+            os.path.join(output_dir, "customer_monthly_activity")
+        )
+        digital_df = pl.read_parquet(
+            os.path.join(output_dir, "digital_engagement_monthly")
+        )
     else:
         account_snapshots_df = pl.DataFrame(account_snapshots)
         card_snapshots_df = pl.DataFrame(card_snapshots)
         loan_snapshots_df = pl.DataFrame(loan_snapshots)
         holdings_df = pl.DataFrame(product_holdings_snapshots)
-        activity_df = pl.concat(activity_snapshots) if activity_snapshots else pl.DataFrame()
-        digital_df = pl.concat(digital_snapshots) if digital_snapshots else pl.DataFrame()
+        activity_df = (
+            pl.concat(activity_snapshots) if activity_snapshots else pl.DataFrame()
+        )
+        digital_df = (
+            pl.concat(digital_snapshots) if digital_snapshots else pl.DataFrame()
+        )
 
     features_df = generate_feature_snapshots(
         customer_master_df,
@@ -1124,7 +1327,7 @@ def run_simulation(
         complaints_df,
         feedback_df,
         labels_df,
-        config
+        config,
     )
 
     res_dict = {
@@ -1141,15 +1344,19 @@ def run_simulation(
     }
 
     if not streaming:
-        res_dict.update({
-            "account_monthly_snapshot": account_snapshots_df,
-            "card_monthly_snapshot": card_snapshots_df,
-            "loan_monthly_snapshot": loan_snapshots_df,
-            "product_holdings_monthly": holdings_df,
-            "transaction_fact": pl.DataFrame(all_transactions) if all_transactions else pl.DataFrame(),
-            "customer_monthly_activity": activity_df,
-            "digital_engagement_monthly": digital_df,
-        })
+        res_dict.update(
+            {
+                "account_monthly_snapshot": account_snapshots_df,
+                "card_monthly_snapshot": card_snapshots_df,
+                "loan_monthly_snapshot": loan_snapshots_df,
+                "product_holdings_monthly": holdings_df,
+                "transaction_fact": pl.DataFrame(all_transactions)
+                if all_transactions
+                else pl.DataFrame(),
+                "customer_monthly_activity": activity_df,
+                "digital_engagement_monthly": digital_df,
+            }
+        )
 
     return res_dict
 
@@ -1197,24 +1404,28 @@ def run_parallel_simulation(
     import logging
     import shutil
     import tempfile
-    
+
     logger = logging.getLogger("simulator")
-    
+
     original_streaming = streaming
     # 1. Parallel execution requires streaming mode to maintain a flat memory footprint and avoid OOMs
     if not streaming:
-        logger.warning("Forcing streaming=True for parallel execution to manage memory.")
+        logger.warning(
+            "Forcing streaming=True for parallel execution to manage memory."
+        )
         streaming = True
-        
+
     temp_dir_obj = None
     if output_dir is None:
         os.makedirs("./data", exist_ok=True)
-        temp_dir_obj = tempfile.TemporaryDirectory(dir="./data", prefix="parallel_sim_temp_")
+        temp_dir_obj = tempfile.TemporaryDirectory(
+            dir="./data", prefix="parallel_sim_temp_"
+        )
         output_dir = temp_dir_obj.name
-        
+
     customer_counts = distribute_customers(config.n_customers, jobs)
     actual_jobs = len(customer_counts)
-    
+
     # 2. Pre-allocate ID ranges with safe headroom per customer to ensure workers write to disjoint key ranges.
     # Headroom math allows 10 accounts/cards/loans, 10,000 transactions, and 100 complaints/feedbacks per customer.
     # Gaps in ID keys between worker chunks are normal and acceptable in synthetic data.
@@ -1224,7 +1435,7 @@ def run_parallel_simulation(
     txn_chunk_limit = 10000
     complaint_chunk_limit = 100
     feedback_chunk_limit = 100
-    
+
     tasks = []
     start_idx = 0
     for i in range(actual_jobs):
@@ -1233,10 +1444,11 @@ def run_parallel_simulation(
             n_customers=chunk_n,
             sim_start=config.sim_start,
             sim_months=config.sim_months,
-            seed=config.seed + i  # Shift seed deterministically per chunk to draw unique random patterns
+            seed=config.seed
+            + i,  # Shift seed deterministically per chunk to draw unique random patterns
         )
         chunk_output_dir = os.path.join(output_dir, "temp_chunks", f"chunk_{i}")
-        
+
         chunk_args = {
             "config": chunk_config,
             "streaming": True,
@@ -1246,37 +1458,45 @@ def run_parallel_simulation(
             "card_id_start": card_id_start + start_idx * card_chunk_limit,
             "loan_id_start": loan_id_start + start_idx * loan_chunk_limit,
             "txn_id_start": txn_id_start + start_idx * txn_chunk_limit,
-            "complaint_id_start": complaint_id_start + start_idx * complaint_chunk_limit,
+            "complaint_id_start": complaint_id_start
+            + start_idx * complaint_chunk_limit,
             "feedback_id_start": feedback_id_start + start_idx * feedback_chunk_limit,
             "jobs": 1,  # Sub-simulations must run sequentially
         }
         tasks.append(chunk_args)
         start_idx += chunk_n
-        
+
     # 3. Execute concurrently using 'spawn' start method to prevent deadlocks from thread pools or locks
     import multiprocessing
+
     ctx = multiprocessing.get_context("spawn")
     results_list = []
-    with concurrent.futures.ProcessPoolExecutor(max_workers=actual_jobs, mp_context=ctx) as executor:
+    with concurrent.futures.ProcessPoolExecutor(
+        max_workers=actual_jobs, mp_context=ctx
+    ) as executor:
         futures = [executor.submit(_run_sub_simulation, task) for task in tasks]
         for fut in concurrent.futures.as_completed(futures):
             results_list.append(fut.result())
-            
+
     # Sort results to ensure deterministic ordering of final concatenated DataFrames
     results_list.sort(key=lambda res: res["customer_master"]["customer_id"].min())
-    
+
     # 4. Concatenate static master tables returned in memory (discarding duplicate branch_master copies)
     final_results = {}
     for table_name in results_list[0].keys():
         if table_name == "branch_master":
             final_results[table_name] = results_list[0][table_name]
         else:
-            dfs_to_concat = [res[table_name] for res in results_list if not res[table_name].is_empty()]
+            dfs_to_concat = [
+                res[table_name]
+                for res in results_list
+                if not res[table_name].is_empty()
+            ]
             if dfs_to_concat:
                 final_results[table_name] = pl.concat(dfs_to_concat)
             else:
                 final_results[table_name] = results_list[0][table_name]
-                
+
     # 5. Merge streamed partitioned tables partition-by-partition to avoid write collisions
     partition_cols = {
         "account_monthly_snapshot": "snapshot_month",
@@ -1287,48 +1507,59 @@ def run_parallel_simulation(
         "customer_monthly_activity": "snapshot_month",
         "digital_engagement_monthly": "snapshot_month",
     }
-    
+
     for table_name, partition_col in partition_cols.items():
         # Discover all unique partition directories (e.g., snapshot_month=YYYY-MM-DD) across all workers
         unique_partition_dirs = set()
         for j in range(actual_jobs):
-            chunk_table_dir = os.path.join(output_dir, "temp_chunks", f"chunk_{j}", table_name)
+            chunk_table_dir = os.path.join(
+                output_dir, "temp_chunks", f"chunk_{j}", table_name
+            )
             if os.path.exists(chunk_table_dir):
                 for entry in os.listdir(chunk_table_dir):
                     if entry.startswith(f"{partition_col}="):
                         unique_partition_dirs.add(entry)
-                        
+
         table_dfs = []
         for part_dir in sorted(unique_partition_dirs):
             chunk_dfs = []
             for j in range(actual_jobs):
-                part_file_path = os.path.join(output_dir, "temp_chunks", f"chunk_{j}", table_name, part_dir, "part-0.parquet")
+                part_file_path = os.path.join(
+                    output_dir,
+                    "temp_chunks",
+                    f"chunk_{j}",
+                    table_name,
+                    part_dir,
+                    "part-0.parquet",
+                )
                 if os.path.exists(part_file_path):
                     chunk_dfs.append(pl.read_parquet(part_file_path))
-                    
+
             if chunk_dfs:
                 merged_part_df = pl.concat(chunk_dfs)
                 if original_streaming:
                     # Write the combined partition file to the final destination folder
                     final_part_dir = os.path.join(output_dir, table_name, part_dir)
                     os.makedirs(final_part_dir, exist_ok=True)
-                    merged_part_df.write_parquet(os.path.join(final_part_dir, "part-0.parquet"))
+                    merged_part_df.write_parquet(
+                        os.path.join(final_part_dir, "part-0.parquet")
+                    )
                 else:
                     # Keep combined partition DataFrame in memory
                     table_dfs.append(merged_part_df)
-                    
+
         if not original_streaming:
             if table_dfs:
                 final_results[table_name] = pl.concat(table_dfs)
             else:
                 final_results[table_name] = pl.DataFrame()
-                
+
     # 6. Cleanup temporary worker chunk folders
     temp_chunks_dir = os.path.join(output_dir, "temp_chunks")
     if os.path.exists(temp_chunks_dir):
         shutil.rmtree(temp_chunks_dir)
-        
+
     if temp_dir_obj is not None:
         temp_dir_obj.cleanup()
-        
+
     return final_results
