@@ -6,6 +6,7 @@ based on customer personas.
 
 from enum import Enum
 from typing import Dict, Set
+
 from config.personas import Persona
 
 
@@ -51,63 +52,63 @@ CONDITIONAL_EVENTS: Set[HiddenEvent] = {
 EVENT_PROBABILITIES: Dict[Persona, Dict[HiddenEvent, float]] = {
     Persona.SALARY_CORE: {
         HiddenEvent.SALARY_JOB_CHANGE: 0.015,
-        HiddenEvent.SALARY_DELAY: 0.030,
+        HiddenEvent.SALARY_DELAY: 0.017,
         HiddenEvent.LARGE_LIFE_EXPENSE: 0.020,
-        HiddenEvent.HOME_PURCHASE: 0.004,
+        HiddenEvent.HOME_PURCHASE: 0.0015,
         HiddenEvent.MARRIAGE_OR_FAMILY_CHANGE: 0.008,
         HiddenEvent.RELOCATION: 0.006,
         HiddenEvent.BANK_SERVICE_FAILURE: 0.020,
-        HiddenEvent.FEE_HIKE_OR_SERVICE_CHARGE: 0.020,
+        HiddenEvent.FEE_HIKE_OR_SERVICE_CHARGE: 0.009,
     },
     Persona.AFFLUENT_MULTI_PRODUCT: {
         HiddenEvent.SALARY_JOB_CHANGE: 0.010,
-        HiddenEvent.SALARY_DELAY: 0.020,
+        HiddenEvent.SALARY_DELAY: 0.010,
         HiddenEvent.LARGE_LIFE_EXPENSE: 0.040,
-        HiddenEvent.HOME_PURCHASE: 0.012,
+        HiddenEvent.HOME_PURCHASE: 0.004,
         HiddenEvent.MARRIAGE_OR_FAMILY_CHANGE: 0.010,
         HiddenEvent.RELOCATION: 0.007,
         HiddenEvent.BANK_SERVICE_FAILURE: 0.020,
-        HiddenEvent.FEE_HIKE_OR_SERVICE_CHARGE: 0.010,
+        HiddenEvent.FEE_HIKE_OR_SERVICE_CHARGE: 0.007,
     },
     Persona.DIGITAL_NATIVE: {
         HiddenEvent.SALARY_JOB_CHANGE: 0.010,
         HiddenEvent.SALARY_DELAY: 0.020,
-        HiddenEvent.LARGE_LIFE_EXPENSE: 0.020,
-        HiddenEvent.HOME_PURCHASE: 0.003,
+        HiddenEvent.LARGE_LIFE_EXPENSE: 0.019,
+        HiddenEvent.HOME_PURCHASE: 0.001,
         HiddenEvent.MARRIAGE_OR_FAMILY_CHANGE: 0.007,
         HiddenEvent.RELOCATION: 0.008,
         HiddenEvent.BANK_SERVICE_FAILURE: 0.030,
-        HiddenEvent.FEE_HIKE_OR_SERVICE_CHARGE: 0.020,
+        HiddenEvent.FEE_HIKE_OR_SERVICE_CHARGE: 0.008,
     },
     Persona.CREDIT_STRESSED: {
         HiddenEvent.SALARY_JOB_CHANGE: 0.020,
-        HiddenEvent.SALARY_DELAY: 0.040,
+        HiddenEvent.SALARY_DELAY: 0.028,
         HiddenEvent.LARGE_LIFE_EXPENSE: 0.050,
-        HiddenEvent.HOME_PURCHASE: 0.006,
+        HiddenEvent.HOME_PURCHASE: 0.002,
         HiddenEvent.MARRIAGE_OR_FAMILY_CHANGE: 0.008,
         HiddenEvent.RELOCATION: 0.010,
         HiddenEvent.BANK_SERVICE_FAILURE: 0.030,
-        HiddenEvent.FEE_HIKE_OR_SERVICE_CHARGE: 0.040,
+        HiddenEvent.FEE_HIKE_OR_SERVICE_CHARGE: 0.020,
     },
     Persona.DORMANT_WEALTHY: {
         HiddenEvent.SALARY_JOB_CHANGE: 0.005,
-        HiddenEvent.SALARY_DELAY: 0.010,
+        HiddenEvent.SALARY_DELAY: 0.006,
         HiddenEvent.LARGE_LIFE_EXPENSE: 0.020,
-        HiddenEvent.HOME_PURCHASE: 0.008,
+        HiddenEvent.HOME_PURCHASE: 0.003,
         HiddenEvent.MARRIAGE_OR_FAMILY_CHANGE: 0.006,
         HiddenEvent.RELOCATION: 0.010,
         HiddenEvent.BANK_SERVICE_FAILURE: 0.010,
-        HiddenEvent.FEE_HIKE_OR_SERVICE_CHARGE: 0.010,
+        HiddenEvent.FEE_HIKE_OR_SERVICE_CHARGE: 0.006,
     },
     Persona.COMPLAINT_PRONE_CHURNER: {
         HiddenEvent.SALARY_JOB_CHANGE: 0.015,
-        HiddenEvent.SALARY_DELAY: 0.030,
+        HiddenEvent.SALARY_DELAY: 0.025,
         HiddenEvent.LARGE_LIFE_EXPENSE: 0.030,
-        HiddenEvent.HOME_PURCHASE: 0.002,
+        HiddenEvent.HOME_PURCHASE: 0.001,
         HiddenEvent.MARRIAGE_OR_FAMILY_CHANGE: 0.007,
         HiddenEvent.RELOCATION: 0.008,
         HiddenEvent.BANK_SERVICE_FAILURE: 0.040,
-        HiddenEvent.FEE_HIKE_OR_SERVICE_CHARGE: 0.040,
+        HiddenEvent.FEE_HIKE_OR_SERVICE_CHARGE: 0.020,
     },
 }
 
