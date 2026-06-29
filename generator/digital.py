@@ -76,7 +76,9 @@ def generate_monthly_digital(
         notification_opt_in = rng.random() < opt_in_prob
 
         # Active if they logged in during the month
-        mobile_app_active = logins > 0 and (p_enum != Persona.DORMANT_WEALTHY or rng.random() < 0.6)
+        mobile_app_active = logins > 0 and (
+            p_enum != Persona.DORMANT_WEALTHY or rng.random() < 0.6
+        )
 
         # Last login date
         if logins > 0:
@@ -88,14 +90,18 @@ def generate_monthly_digital(
         if notification_opt_in:
             push_sent = int(rng.poisson(12.0))
             # Open rate scaled by customer engagement score
-            push_opened = int(rng.binomial(push_sent, max(0.05, min(0.95, engagement_score))))
+            push_opened = int(
+                rng.binomial(push_sent, max(0.05, min(0.95, engagement_score)))
+            )
         else:
             push_sent = 0
             push_opened = 0
 
         email_sent = int(rng.poisson(6.0))
         # Email click rate is lower than push notifications open rate
-        email_clicks = int(rng.binomial(email_sent, max(0.01, min(0.40, engagement_score * 0.3))))
+        email_clicks = int(
+            rng.binomial(email_sent, max(0.01, min(0.40, engagement_score * 0.3)))
+        )
 
         # 4. Campaigns response mapping
         campaigns_received = 0
