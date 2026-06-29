@@ -86,12 +86,14 @@ def generate_non_salary_income(
     Returns 1-3 credit transactions per month drawn from persona income distribution.
     """
     p_config = PERSONA_CONFIGS[persona]
-    
+
     # Draw monthly income from lognormal (same params, divide by 12)
     drawn_annual = rng.lognormal(p_config.income_log_mu, p_config.income_log_sigma)
-    drawn_annual = np.clip(drawn_annual, p_config.income_clip_min, p_config.income_clip_max)
+    drawn_annual = np.clip(
+        drawn_annual, p_config.income_clip_min, p_config.income_clip_max
+    )
     monthly_income = drawn_annual / 12.0
-    
+
     # 1. Dormant Wealthy: Quarterly credits (investment returns/rental)
     if persona == Persona.DORMANT_WEALTHY:
         # Check if it is the 3rd month (e.g. March, June, September, December)
@@ -103,9 +105,15 @@ def generate_non_salary_income(
     else:
         # Number of credit events varies by persona
         n_credits = {
-            Persona.DIGITAL_NATIVE: int(rng.integers(2, 5)),      # freelance/gig, multiple small credits
-            Persona.AFFLUENT_MULTI_PRODUCT: int(rng.integers(1, 3)),  # business income, fewer larger credits  
-            Persona.CREDIT_STRESSED: int(rng.integers(1, 3)),     # irregular, sometimes partial
+            Persona.DIGITAL_NATIVE: int(
+                rng.integers(2, 5)
+            ),  # freelance/gig, multiple small credits
+            Persona.AFFLUENT_MULTI_PRODUCT: int(
+                rng.integers(1, 3)
+            ),  # business income, fewer larger credits
+            Persona.CREDIT_STRESSED: int(
+                rng.integers(1, 3)
+            ),  # irregular, sometimes partial
             Persona.COMPLAINT_PRONE_CHURNER: int(rng.integers(1, 3)),
             Persona.SALARY_CORE: 1,  # fallback
         }[persona]
@@ -129,7 +137,9 @@ def generate_non_salary_income(
     days_in_month = (next_month - txn_month).days
 
     # Select random days for credits
-    credit_days = rng.choice(np.arange(1, days_in_month + 1), size=n_credits, replace=True)
+    credit_days = rng.choice(
+        np.arange(1, days_in_month + 1), size=n_credits, replace=True
+    )
 
     txns = []
     current_id = start_txn_id
@@ -138,7 +148,9 @@ def generate_non_salary_income(
         day = int(credit_days[i])
         amt = round(monthly_income * w, 2)
         txn_date = date(txn_month.year, txn_month.month, day)
-        timestamp = datetime.combine(txn_date, time(11, 0, 0))  # Standard morning credit
+        timestamp = datetime.combine(
+            txn_date, time(11, 0, 0)
+        )  # Standard morning credit
 
         if persona == Persona.DORMANT_WEALTHY:
             cp_type = "Self Transfer"
@@ -146,7 +158,14 @@ def generate_non_salary_income(
             category = "Investment Income"
         else:
             cp_type = "Business Income"
-            merchant_name = rng.choice(["Freelance Client", "Vendor Transfer", "Customer Payment", "Consulting Fee"])
+            merchant_name = rng.choice(
+                [
+                    "Freelance Client",
+                    "Vendor Transfer",
+                    "Customer Payment",
+                    "Consulting Fee",
+                ]
+            )
             category = "Professional Services"
 
         txns.append(
@@ -159,7 +178,9 @@ def generate_non_salary_income(
                 "txn_month": txn_month,
                 "txn_type": "Direct Credit",
                 "direction": "Credit",
-                "channel": rng.choice(["UPI", "Transfer", "Internet Banking"], p=[0.5, 0.3, 0.2]),
+                "channel": rng.choice(
+                    ["UPI", "Transfer", "Internet Banking"], p=[0.5, 0.3, 0.2]
+                ),
                 "amount": amt,
                 "currency": "INR",
                 "merchant_category": category,
@@ -378,7 +399,7 @@ def generate_monthly_regular_transactions(
     states = []
     lambda_days_list = []
     base_lambdas = []
-    
+
     for c in active_customers:
         cid = c["customer_id"]
         persona = Persona(c["persona"])
@@ -386,7 +407,7 @@ def generate_monthly_regular_transactions(
         personas.append(persona)
         cities.append(c["city"])
         states.append(c["state"])
-        
+
         if persona == Persona.DIGITAL_NATIVE:
             ld = 10
             bl = 1.2
@@ -399,7 +420,7 @@ def generate_monthly_regular_transactions(
         else:
             ld = 5
             bl = 0.5
-            
+
         lambda_days_list.append(ld)
         base_lambdas.append(bl)
 
@@ -419,7 +440,7 @@ def generate_monthly_regular_transactions(
     days_repeated = []
     lambdas_repeated = []
     indices_repeated = []
-    
+
     for i, (cid, days) in enumerate(zip(cids, cust_days)):
         nd = len(days)
         if nd > 0:
@@ -444,7 +465,7 @@ def generate_monthly_regular_transactions(
 
     counts_cd = rng.poisson(lambdas_cd)
     valid_cd = counts_cd > 0
-    
+
     if not np.any(valid_cd):
         return []
 
@@ -460,30 +481,39 @@ def generate_monthly_regular_transactions(
 
     cat_keys = list(MERCHANTS.keys())
     txn_cat_idx = rng.integers(0, len(cat_keys), size=n_txns)
-    
-    txn_merchants = []
-    txn_cats = []
-    for idx in txn_cat_idx:
-        cat = cat_keys[idx]
-        txn_cats.append(cat)
-        merchants_list = MERCHANTS[cat]
-        m_idx = rng.integers(0, len(merchants_list))
-        txn_merchants.append(merchants_list[m_idx])
+
+    # Vectorized category and merchant selection
+    txn_cats = [cat_keys[idx] for idx in txn_cat_idx]
+    txn_merchants = [None] * n_txns
+    for cat in cat_keys:
+        cat_indices = np.where(txn_cat_idx == cat_keys.index(cat))[0]
+        count = len(cat_indices)
+        if count > 0:
+            merchants_list = MERCHANTS[cat]
+            drawn_m = rng.choice(merchants_list, size=count)
+            for idx, m in zip(cat_indices, drawn_m):
+                txn_merchants[idx] = m
 
     channels = ["UPI", "POS", "ATM", "Internet Banking", "Mobile App"]
     txn_channels = [None] * n_txns
-    
+
+    personas_arr = np.array([p.value for p in personas])
+    txn_personas = personas_arr[txn_indices]
+
     for p_val in [Persona.DIGITAL_NATIVE, Persona.DORMANT_WEALTHY, None]:
         if p_val == Persona.DIGITAL_NATIVE:
-            p_mask = np.array([personas[idx] == Persona.DIGITAL_NATIVE for idx in txn_indices])
+            p_mask = (txn_personas == Persona.DIGITAL_NATIVE.value)
             p_probs = [0.70, 0.15, 0.02, 0.03, 0.10]
         elif p_val == Persona.DORMANT_WEALTHY:
-            p_mask = np.array([personas[idx] == Persona.DORMANT_WEALTHY for idx in txn_indices])
+            p_mask = (txn_personas == Persona.DORMANT_WEALTHY.value)
             p_probs = [0.10, 0.30, 0.40, 0.15, 0.05]
         else:
-            p_mask = np.array([personas[idx] != Persona.DIGITAL_NATIVE and personas[idx] != Persona.DORMANT_WEALTHY for idx in txn_indices])
+            p_mask = ~(
+                (txn_personas == Persona.DIGITAL_NATIVE.value)
+                | (txn_personas == Persona.DORMANT_WEALTHY.value)
+            )
             p_probs = [0.45, 0.25, 0.15, 0.05, 0.10]
-            
+
         p_count = np.sum(p_mask)
         if p_count > 0:
             drawn_channels = rng.choice(channels, size=p_count, p=p_probs)
@@ -492,8 +522,9 @@ def generate_monthly_regular_transactions(
                 txn_channels[idx] = chan
 
     txn_amounts = np.zeros(n_txns)
+    txn_cats_arr = np.array(txn_cats)
     for cat in cat_keys:
-        cat_mask = np.array([c == cat for c in txn_cats])
+        cat_mask = (txn_cats_arr == cat)
         cat_count = np.sum(cat_mask)
         if cat_count > 0:
             if cat == "Groceries":
@@ -508,10 +539,18 @@ def generate_monthly_regular_transactions(
                 low, high = 500.0, 3000.0
             else:
                 low, high = 1000.0, 15000.0
-                
+
             txn_amounts[cat_mask] = rng.uniform(low, high, size=cat_count)
 
-    has_large_life_expense = np.array(["large_life_expense" in customer_events.get(cid, set()) for cid in txn_cids])
+    has_lle_map = np.array([
+        "large_life_expense" in customer_events.get(cid, set()) for cid in cids
+    ])
+    has_jc_map = np.array([
+        "salary_job_change" in customer_events.get(cid, set()) for cid in cids
+    ])
+    has_large_life_expense = has_lle_map[txn_indices]
+    has_job_change = has_jc_map[txn_indices]
+
     if np.any(has_large_life_expense):
         n_lle = np.sum(has_large_life_expense)
         lle_draws = rng.random(n_lle) < 0.5
@@ -520,7 +559,6 @@ def generate_monthly_regular_transactions(
             lle_scales[lle_draws] = rng.uniform(5.0, 15.0, size=np.sum(lle_draws))
         txn_amounts[has_large_life_expense] *= lle_scales
 
-    has_job_change = np.array(["salary_job_change" in customer_events.get(cid, set()) for cid in txn_cids])
     if np.any(has_job_change):
         n_jc = np.sum(has_job_change)
         jc_scales = rng.uniform(0.8, 2.0, size=n_jc)
@@ -532,37 +570,52 @@ def generate_monthly_regular_transactions(
 
     txns = []
     curr_id = start_txn_id
-    
+
+    # Cache Date objects to avoid repeated instantiation
+    date_cache = [
+        date(snapshot_month.year, snapshot_month.month, d)
+        for d in range(1, days_in_month + 1)
+    ]
+
     for i in range(n_txns):
         cid = int(txn_cids[i])
         day = int(txn_days[i])
         idx = int(txn_indices[i])
-        
-        txn_date = date(snapshot_month.year, snapshot_month.month, day)
-        timestamp = datetime.combine(txn_date, time(int(hours[i]), int(minutes[i]), int(seconds[i])))
-        
-        txns.append({
-            "transaction_id": curr_id,
-            "account_id": None,
-            "customer_id": cid,
-            "txn_timestamp": timestamp,
-            "txn_date": txn_date,
-            "txn_month": snapshot_month,
-            "txn_type": "Debit Card / UPI",
-            "direction": "Debit",
-            "channel": txn_channels[i],
-            "amount": round(float(txn_amounts[i]), 2),
-            "currency": "INR",
-            "merchant_category": txn_cats[i],
-            "merchant_name": txn_merchants[i],
-            "counterparty_type": "Merchant",
-            "city": cities[idx],
-            "state": states[idx],
-            "is_salary_credit": False,
-            "is_fee": False,
-            "is_reversal": False,
-            "balance_after_txn": 0.0,
-        })
+
+        txn_date = date_cache[day - 1]
+        timestamp = datetime(
+            snapshot_month.year,
+            snapshot_month.month,
+            day,
+            int(hours[i]),
+            int(minutes[i]),
+            int(seconds[i]),
+        )
+
+        txns.append(
+            {
+                "transaction_id": curr_id,
+                "account_id": None,
+                "customer_id": cid,
+                "txn_timestamp": timestamp,
+                "txn_date": txn_date,
+                "txn_month": snapshot_month,
+                "txn_type": "Debit Card / UPI",
+                "direction": "Debit",
+                "channel": txn_channels[i],
+                "amount": round(float(txn_amounts[i]), 2),
+                "currency": "INR",
+                "merchant_category": txn_cats[i],
+                "merchant_name": txn_merchants[i],
+                "counterparty_type": "Merchant",
+                "city": cities[idx],
+                "state": states[idx],
+                "is_salary_credit": False,
+                "is_fee": False,
+                "is_reversal": False,
+                "balance_after_txn": 0.0,
+            }
+        )
         curr_id += 1
 
     return txns
@@ -578,7 +631,7 @@ def generate_monthly_non_salary_income(
     """Generates all irregular income credits for non-salary account holders in a single month using vectorized operations."""
     txns = []
     curr_id = start_txn_id
-    
+
     if not non_salary_customers:
         return []
 
@@ -593,15 +646,14 @@ def generate_monthly_non_salary_income(
     acc_ids = [c["account_id"] for c in non_salary_customers]
     cities = [c["city"] for c in non_salary_customers]
     states = [c["state"] for c in non_salary_customers]
-    incomes = [c["annual_income"] for c in non_salary_customers]
 
     n_cust = len(cids)
-    
+
     mus = np.array([PERSONA_CONFIGS[p].income_log_mu for p in personas])
     sigmas = np.array([PERSONA_CONFIGS[p].income_log_sigma for p in personas])
     clip_mins = np.array([PERSONA_CONFIGS[p].income_clip_min for p in personas])
     clip_maxs = np.array([PERSONA_CONFIGS[p].income_clip_max for p in personas])
-    
+
     drawn_annual = rng.lognormal(mus, sigmas)
     drawn_annual = np.clip(drawn_annual, clip_mins, clip_maxs)
     monthly_incomes = drawn_annual / 12.0
@@ -621,67 +673,84 @@ def generate_monthly_non_salary_income(
                 nc = 1
             else:
                 nc = rng.integers(1, 3)
-                
+
         if p == Persona.CREDIT_STRESSED and rng.random() < 0.15:
             monthly_incomes[i] *= rng.uniform(0.60, 0.80)
-            
+
         n_credits_list.append(int(nc))
+
+    # Cache Date objects to avoid repeated instantiation
+    date_cache = [
+        date(snapshot_month.year, snapshot_month.month, d)
+        for d in range(1, days_in_month + 1)
+    ]
 
     for i in range(n_cust):
         nc = n_credits_list[i]
         if nc == 0:
             continue
-            
+
         cid = cids[i]
         acc_id = acc_ids[i]
         persona = personas[i]
         income = monthly_incomes[i]
-        
+
         if nc > 1:
             weights = rng.random(nc)
             weights /= weights.sum()
         else:
             weights = [1.0]
-            
+
         credit_days = rng.choice(np.arange(1, days_in_month + 1), size=nc, replace=True)
-        
+
         for k in range(nc):
             day = int(credit_days[k])
             amt = round(float(income * weights[k]), 2)
-            txn_date = date(snapshot_month.year, snapshot_month.month, day)
-            timestamp = datetime.combine(txn_date, time(11, 0, 0))
-            
+            txn_date = date_cache[day - 1]
+            timestamp = datetime(snapshot_month.year, snapshot_month.month, day, 11, 0, 0)
+
             if persona == Persona.DORMANT_WEALTHY:
                 cp_type = "Self Transfer"
                 merchant_name = "Self Account"
                 category = "Investment Income"
             else:
                 cp_type = "Business Income"
-                merchant_name = rng.choice(["Freelance Client", "Vendor Transfer", "Customer Payment", "Consulting Fee"])
+                merchant_name = rng.choice(
+                    [
+                        "Freelance Client",
+                        "Vendor Transfer",
+                        "Customer Payment",
+                        "Consulting Fee",
+                    ]
+                )
                 category = "Professional Services"
-                
-            txns.append({
-                "transaction_id": curr_id,
-                "account_id": acc_id,
-                "customer_id": cid,
-                "txn_timestamp": timestamp,
-                "txn_date": txn_date,
-                "txn_month": snapshot_month,
-                "txn_type": "Direct Credit",
-                "direction": "Credit",
-                "channel": rng.choice(["UPI", "Transfer", "Internet Banking"], p=[0.5, 0.3, 0.2]),
-                "amount": amt,
-                "currency": "INR",
-                "merchant_category": category,
-                "merchant_name": merchant_name,
-                "counterparty_type": cp_type,
-                "city": cities[i],
-                "state": states[i],
-                "is_salary_credit": False,
-                "is_fee": False,
-                "is_reversal": False,
-                "balance_after_txn": 0.0,
-            })
+
+            txns.append(
+                {
+                    "transaction_id": curr_id,
+                    "account_id": acc_id,
+                    "customer_id": cid,
+                    "txn_timestamp": timestamp,
+                    "txn_date": txn_date,
+                    "txn_month": snapshot_month,
+                    "txn_type": "Direct Credit",
+                    "direction": "Credit",
+                    "channel": rng.choice(
+                        ["UPI", "Transfer", "Internet Banking"], p=[0.5, 0.3, 0.2]
+                    ),
+                    "amount": amt,
+                    "currency": "INR",
+                    "merchant_category": category,
+                    "merchant_name": merchant_name,
+                    "counterparty_type": cp_type,
+                    "city": cities[i],
+                    "state": states[i],
+                    "is_salary_credit": False,
+                    "is_fee": False,
+                    "is_reversal": False,
+                    "balance_after_txn": 0.0,
+                }
+            )
             curr_id += 1
-            
+
     return txns
