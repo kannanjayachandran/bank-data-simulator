@@ -34,7 +34,9 @@ def load_to_postgres(dataframes: Dict[str, pl.DataFrame], connection_uri: str) -
     try:
         conn = psycopg2.connect(connection_uri)
     except Exception as e:
-        print(f"Warning: Could not connect to PostgreSQL database ({e}). Skipping database load.")
+        print(
+            f"Warning: Could not connect to PostgreSQL database ({e}). Skipping database load."
+        )
         return
 
     try:
@@ -44,9 +46,11 @@ def load_to_postgres(dataframes: Dict[str, pl.DataFrame], connection_uri: str) -
         # Assume it's located at pipeline/schema.sql relative to workspace root
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         schema_path = os.path.join(base_dir, "pipeline", "schema.sql")
-        
+
         if not os.path.exists(schema_path):
-            schema_path = os.path.join(os.path.abspath(os.curdir), "pipeline", "schema.sql")
+            schema_path = os.path.join(
+                os.path.abspath(os.curdir), "pipeline", "schema.sql"
+            )
 
         if os.path.exists(schema_path):
             with open(schema_path, "r") as f:
@@ -93,14 +97,18 @@ def load_to_postgres(dataframes: Dict[str, pl.DataFrame], connection_uri: str) -
             buffer.seek(0)
 
             # COPY command
-            copy_sql = f"COPY {name} FROM STDIN WITH (FORMAT csv, HEADER false, NULL '')"
+            copy_sql = (
+                f"COPY {name} FROM STDIN WITH (FORMAT csv, HEADER false, NULL '')"
+            )
             try:
                 cursor.copy_expert(copy_sql, buffer)
                 conn.commit()
                 print(f"Successfully bulk loaded {df.height} rows into {name}.")
             except Exception as load_err:
                 conn.rollback()
-                print(f"Error bulk loading into {name}: {load_err}. Skipping this table.")
+                print(
+                    f"Error bulk loading into {name}: {load_err}. Skipping this table."
+                )
 
     except Exception as run_err:
         print(f"Error during PostgreSQL processing: {run_err}")
