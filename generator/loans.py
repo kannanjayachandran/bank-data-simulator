@@ -10,21 +10,14 @@ import numpy as np
 import polars as pl
 
 from config.constants import (
-    HOME_LOAN_TENURE_RANGE,
     LOAN_ID_START,
-    PERSONAL_LOAN_TENURE_RANGE,
     FOIR_LIMITS,
     MIN_PERSONAL_LOAN_AMOUNT,
     MIN_HOME_LOAN_AMOUNT,
 )
 from config.simulation import SimulationConfig
-from generator.branches import BRANCH_DATA
 from generator.spine import Spine
 from typing import Tuple
-
-
-# Map city to branch code for fast lookup
-CITY_TO_BRANCH = {b["city"]: b["branch_code"] for b in BRANCH_DATA}
 
 
 def compute_max_principal(max_emi: float, rate: float, tenure_months: int) -> float:
@@ -65,6 +58,7 @@ def generate_loans(
         row["customer_id"]: {
             "customer_since": row["customer_since"],
             "city": row["city"],
+            "branch_code": row.get("branch_code", "B001"),
             "annual_income": row["annual_income"],
         }
         for row in customer_df.to_dicts()
@@ -87,13 +81,17 @@ def generate_loans(
         c_info = cust_data[cid]
         p_info = prod_data[cid]
 
-        branch_code = CITY_TO_BRANCH.get(c_info["city"], "B001")
+        branch_code = c_info.get("branch_code", "B001")
         join_date = c_info["customer_since"]
 
         # Calculate max months between customer join date and simulation start
         # Limit to 1 to 24 months for loan disbursement relative to sim_start
-        months_since_joined = (config.sim_start.year - join_date.year) * 12 + (config.sim_start.month - join_date.month)
-        disbursement_months_ago = rng.integers(1, max(2, min(24, months_since_joined + 1)))
+        months_since_joined = (config.sim_start.year - join_date.year) * 12 + (
+            config.sim_start.month - join_date.month
+        )
+        disbursement_months_ago = rng.integers(
+            1, max(2, min(24, months_since_joined + 1))
+        )
 
         # Subtract disbursement_months_ago from sim_start
         disb_year = config.sim_start.year - (disbursement_months_ago // 12)
@@ -108,19 +106,29 @@ def generate_loans(
             interest_rate = float(rng.uniform(10.5, 15.0))
             # Sample personal loan tenure from [12, 24, 36, 48, 60] months
             tenure_months = int(rng.choice([12, 24, 36, 48, 60]))
-            
+
             # Apply FOIR Limit and check minimum floor
             monthly_income = c_info["annual_income"] / 12.0
             max_emi = monthly_income * FOIR_LIMITS["Personal Loan"]
-            foir_max_principal = compute_max_principal(max_emi, interest_rate, tenure_months)
+            foir_max_principal = compute_max_principal(
+                max_emi, interest_rate, tenure_months
+            )
 
             if foir_max_principal < MIN_PERSONAL_LOAN_AMOUNT:
                 revoked_personal_loans.add(cid)
             else:
                 # Sanctioned amount based on annual income
                 max_amt = max(MIN_PERSONAL_LOAN_AMOUNT, c_info["annual_income"] * 0.5)
-                sanctioned_amount = float(max(MIN_PERSONAL_LOAN_AMOUNT, round(rng.uniform(MIN_PERSONAL_LOAN_AMOUNT, max_amt), -3)))
-                sanctioned_amount = float(np.floor(min(sanctioned_amount, foir_max_principal) / 1000.0) * 1000.0)
+                sanctioned_amount = float(
+                    max(
+                        MIN_PERSONAL_LOAN_AMOUNT,
+                        round(rng.uniform(MIN_PERSONAL_LOAN_AMOUNT, max_amt), -3),
+                    )
+                )
+                sanctioned_amount = float(
+                    np.floor(min(sanctioned_amount, foir_max_principal) / 1000.0)
+                    * 1000.0
+                )
 
                 # EMI Calculation
                 R = interest_rate / 12.0 / 100.0
@@ -151,8 +159,18 @@ def generate_loans(
                         "interest_rate": float(round(interest_rate, 3)),
                         "tenure_months": tenure_months,
                         "emi_amount": emi_amount,
-                        "loan_purpose": rng.choice(["Medical", "Education", "Wedding", "Travel", "Home Renovation"]),
-                        "origination_channel": rng.choice(["Branch", "Online", "Agent"], p=[0.40, 0.40, 0.20]),
+                        "loan_purpose": rng.choice(
+                            [
+                                "Medical",
+                                "Education",
+                                "Wedding",
+                                "Travel",
+                                "Home Renovation",
+                            ]
+                        ),
+                        "origination_channel": rng.choice(
+                            ["Branch", "Online", "Agent"], p=[0.40, 0.40, 0.20]
+                        ),
                         "loan_status": "Active",
                         "maturity_date": maturity_date,
                     }
@@ -164,19 +182,29 @@ def generate_loans(
             interest_rate = float(rng.uniform(8.2, 9.5))
             # Sample home loan tenure from [120, 180, 240] months
             tenure_months = int(rng.choice([120, 180, 240]))
-            
+
             # Apply FOIR Limit and check minimum floor
             monthly_income = c_info["annual_income"] / 12.0
             max_emi = monthly_income * FOIR_LIMITS["Home Loan"]
-            foir_max_principal = compute_max_principal(max_emi, interest_rate, tenure_months)
+            foir_max_principal = compute_max_principal(
+                max_emi, interest_rate, tenure_months
+            )
 
             if foir_max_principal < MIN_HOME_LOAN_AMOUNT:
                 revoked_home_loans.add(cid)
             else:
                 # Sanctioned amount based on annual income
                 max_amt = max(MIN_HOME_LOAN_AMOUNT, c_info["annual_income"] * 5.0)
-                sanctioned_amount = float(max(MIN_HOME_LOAN_AMOUNT, round(rng.uniform(MIN_HOME_LOAN_AMOUNT, max_amt), -4)))
-                sanctioned_amount = float(np.floor(min(sanctioned_amount, foir_max_principal) / 10000.0) * 10000.0)
+                sanctioned_amount = float(
+                    max(
+                        MIN_HOME_LOAN_AMOUNT,
+                        round(rng.uniform(MIN_HOME_LOAN_AMOUNT, max_amt), -4),
+                    )
+                )
+                sanctioned_amount = float(
+                    np.floor(min(sanctioned_amount, foir_max_principal) / 10000.0)
+                    * 10000.0
+                )
 
                 # EMI Calculation
                 R = interest_rate / 12.0 / 100.0
@@ -208,7 +236,9 @@ def generate_loans(
                         "tenure_months": tenure_months,
                         "emi_amount": emi_amount,
                         "loan_purpose": "Property Purchase",
-                        "origination_channel": rng.choice(["Branch", "Online", "Agent"], p=[0.50, 0.30, 0.20]),
+                        "origination_channel": rng.choice(
+                            ["Branch", "Online", "Agent"], p=[0.50, 0.30, 0.20]
+                        ),
                         "loan_status": "Active",
                         "maturity_date": maturity_date,
                     }
