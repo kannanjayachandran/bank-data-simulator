@@ -9,7 +9,11 @@ from typing import Optional
 import numpy as np
 import polars as pl
 
-from config.constants import CREDIT_LIMIT_MULTIPLIER, CARD_ID_START, PRIMARY_ACCOUNT_TYPE
+from config.constants import (
+    CREDIT_LIMIT_MULTIPLIER,
+    CARD_ID_START,
+    PRIMARY_ACCOUNT_TYPE,
+)
 from config.personas import Persona
 from config.simulation import SimulationConfig
 from generator.spine import Spine
@@ -42,8 +46,7 @@ def generate_cards(
 
     # Map customer_id to persona from spine
     spine_personas = {
-        row["customer_id"]: row["persona"]
-        for row in spine.simulation_state.to_dicts()
+        row["customer_id"]: row["persona"] for row in spine.simulation_state.to_dicts()
     }
 
     # Convert to dictionary mappings for faster lookups
