@@ -6,6 +6,7 @@ based on persona configurations, transaction summaries, and active events.
 
 from datetime import date
 from typing import Dict, List, Optional
+
 import numpy as np
 import polars as pl
 
@@ -45,16 +46,19 @@ def generate_monthly_activity(
     for cid, pers_name in zip(customer_ids, personas):
         p_enum = Persona(pers_name)
         events = active_events_dict.get(cid, [])
-        txns = txn_aggregates.get(cid, {
-            "debit_count": 0,
-            "credit_count": 0,
-            "debit_amount": 0.0,
-            "credit_amount": 0.0,
-            "unique_merchants": 0,
-            "cash_withdrawal_count": 0,
-            "card_present_count": 0,
-            "card_not_present_count": 0,
-        })
+        txns = txn_aggregates.get(
+            cid,
+            {
+                "debit_count": 0,
+                "credit_count": 0,
+                "debit_amount": 0.0,
+                "credit_amount": 0.0,
+                "unique_merchants": 0,
+                "cash_withdrawal_count": 0,
+                "card_present_count": 0,
+                "card_not_present_count": 0,
+            },
+        )
 
         # 1. Logins Poisson parameters by persona
         if p_enum == Persona.DIGITAL_NATIVE:
@@ -127,8 +131,16 @@ def generate_monthly_activity(
         card_not_present_txn_count = txns["card_not_present_count"]
 
         # Days since last event
-        days_since_last_login = int(rng.integers(0, 30)) if login_count == 0 else int(rng.choice([0, 1, 2, 3, 4]))
-        days_since_last_txn = int(rng.integers(0, 30)) if debit_txn_count == 0 else int(rng.choice([0, 1, 2, 3, 4, 5]))
+        days_since_last_login = (
+            int(rng.integers(0, 30))
+            if login_count == 0
+            else int(rng.choice([0, 1, 2, 3, 4]))
+        )
+        days_since_last_txn = (
+            int(rng.integers(0, 30))
+            if debit_txn_count == 0
+            else int(rng.choice([0, 1, 2, 3, 4, 5]))
+        )
 
         rows.append(
             {
