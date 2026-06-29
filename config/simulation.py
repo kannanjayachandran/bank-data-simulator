@@ -5,6 +5,7 @@ parameters of the synthetic data generation run.
 """
 
 from datetime import date
+
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -15,7 +16,7 @@ class SimulationConfig(BaseModel):
     """
 
     # Note: Development default is set to 2000 customers.
-    # The production target is 100,000 customers or beyond. (based on business priority)
+    # The production target is 100,000 customers or beyond.
     n_customers: int = Field(
         default=2000,
         description="Total number of customers to generate in the synthetic spine.",
