@@ -1,5 +1,3 @@
-import sys
-import os
 import line_profiler
 from datetime import date
 from config.simulation import SimulationConfig
@@ -9,10 +7,7 @@ from generator.labels import generate_feature_snapshots
 
 def main():
     config = SimulationConfig(
-        n_customers=2000,
-        sim_start=date(2024, 1, 1),
-        sim_months=24,
-        seed=42
+        n_customers=2000, sim_start=date(2024, 1, 1), sim_months=24, seed=42
     )
 
     lp = line_profiler.LineProfiler()
