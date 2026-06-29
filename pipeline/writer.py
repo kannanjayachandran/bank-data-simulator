@@ -59,7 +59,9 @@ def write_to_parquet(dataframes: Dict[str, pl.DataFrame], output_dir: str) -> No
             unique_vals = df[part_col].unique().sort().to_list()
             for val in unique_vals:
                 sub_df = df.filter(pl.col(part_col) == val)
-                val_str = val.strftime("%Y-%m-%d") if hasattr(val, "strftime") else str(val)
+                val_str = (
+                    val.strftime("%Y-%m-%d") if hasattr(val, "strftime") else str(val)
+                )
                 part_dir = os.path.join(output_dir, name, f"{part_col}={val_str}")
                 os.makedirs(part_dir, exist_ok=True)
                 file_path = os.path.join(part_dir, "part-0.parquet")
