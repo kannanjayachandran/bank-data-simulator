@@ -27,7 +27,8 @@ CREATE TABLE branch_master (
     region VARCHAR(50) NOT NULL,
     branch_type VARCHAR(30) NOT NULL,
     open_date DATE NOT NULL,
-    closure_date DATE NULL
+    closure_date DATE NULL,
+    customer_weight INT NOT NULL
 );
 
 -- 2. customer_master
