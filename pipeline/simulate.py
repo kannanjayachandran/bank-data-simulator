@@ -1407,14 +1407,6 @@ def run_parallel_simulation(
 
     logger = logging.getLogger("simulator")
 
-    original_streaming = streaming
-    # 1. Parallel execution requires streaming mode to maintain a flat memory footprint and avoid OOMs
-    if not streaming:
-        logger.warning(
-            "Forcing streaming=True for parallel execution to manage memory."
-        )
-        streaming = True
-
     temp_dir_obj = None
     if output_dir is None:
         os.makedirs("./data", exist_ok=True)
@@ -1537,7 +1529,7 @@ def run_parallel_simulation(
 
             if chunk_dfs:
                 merged_part_df = pl.concat(chunk_dfs)
-                if original_streaming:
+                if streaming:
                     # Write the combined partition file to the final destination folder
                     final_part_dir = os.path.join(output_dir, table_name, part_dir)
                     os.makedirs(final_part_dir, exist_ok=True)
@@ -1548,7 +1540,7 @@ def run_parallel_simulation(
                     # Keep combined partition DataFrame in memory
                     table_dfs.append(merged_part_df)
 
-        if not original_streaming:
+        if not streaming:
             if table_dfs:
                 final_results[table_name] = pl.concat(table_dfs)
             else:
