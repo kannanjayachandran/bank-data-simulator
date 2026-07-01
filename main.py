@@ -29,6 +29,12 @@ def main():
     parser.add_argument(
         "--jobs", type=int, default=1, help="Number of parallel jobs to run"
     )
+    parser.add_argument(
+        "--streaming",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Enable or disable streaming mode (default: True for parallel, False for sequential)",
+    )
 
     args = parser.parse_args()
 
@@ -50,8 +56,13 @@ def main():
         f"Running simulation for {config.n_customers} customers over {config.sim_months} months with {args.jobs} job(s)..."
     )
     start_time = time.time()
-    # Force streaming mode for multi-core jobs to maintain a flat memory footprint and avoid OOMs
-    streaming = args.jobs > 1
+    # Respect user explicitly setting --streaming / --no-streaming.
+    # Otherwise, default to streaming mode for multi-core jobs.
+    if args.streaming is not None:
+        streaming = args.streaming
+    else:
+        streaming = args.jobs > 1
+
     results = run_simulation(
         config, streaming=streaming, output_dir=args.output_dir, jobs=args.jobs
     )
@@ -60,14 +71,18 @@ def main():
 
     # 2. Save Parquet
     print(f"Saving partitioned Parquet files to: {args.output_dir}...")
+    start_write = time.time()
     write_to_parquet(results, args.output_dir)
-    print("✔ Parquet write completed.")
+    write_duration = time.time() - start_write
+    print(f"✔ Parquet write completed in {write_duration:.2f} seconds.")
 
     # 3. Load to Postgres (Optional)
     if args.postgres_uri:
         print(f"Loading to PostgreSQL at: {args.postgres_uri}...")
+        start_load_pg = time.time()
         load_to_postgres(results, args.postgres_uri)
-        print("✔ PostgreSQL load completed.")
+        load_duration_pg = time.time() - start_load_pg
+        print(f"✔ PostgreSQL load completed in {load_duration_pg:.2f} seconds.")
 
     # 4. Load to DuckDB (Optional)
     if args.duckdb_db:
@@ -76,6 +91,8 @@ def main():
             print(f"Cleaning old database file: {args.duckdb_db}")
             os.remove(args.duckdb_db)
         os.makedirs(os.path.dirname(args.duckdb_db), exist_ok=True)
+        
+        start_load = time.time()
         con = duckdb.connect(args.duckdb_db)
 
         static_tables = [
@@ -103,17 +120,18 @@ def main():
         for t in static_tables:
             path = os.path.join(args.output_dir, f"{t}.parquet")
             con.execute(f"CREATE TABLE {t} AS SELECT * FROM read_parquet('{path}')")
-            print(f"  ✔ Loaded static table: {t}")
+        print(f"  ✔ Loaded static tables: {', '.join(static_tables)}")
 
         for t in partitioned_tables:
             glob = os.path.join(args.output_dir, t, "**", "*.parquet")
             con.execute(
                 f"CREATE TABLE {t} AS SELECT * FROM read_parquet('{glob}', hive_partitioning=true)"
             )
-            print(f"  ✔ Loaded partitioned table: {t}")
+        print(f"  ✔ Loaded partitioned tables: {', '.join(partitioned_tables)}")
 
         con.close()
-        print("✔ DuckDB load completed.")
+        load_duration = time.time() - start_load
+        print(f"✔ DuckDB load completed in {load_duration:.2f} seconds.")
 
 
 if __name__ == "__main__":
